@@ -7,7 +7,7 @@ An AI-powered Benefits and Leave Management system with three agents. Employees 
 ## Team
 
 - Joan Albayrak
-- [Teammate name]
+- Dikshyant Giri ([@Diksh-giri](https://github.com/Diksh-giri))
 
 ## The three agents
 
