@@ -1,0 +1,113 @@
+{
+  "_note": "Made-up demo data only. Never put real employee data in this file.",
+  "as_of": "2026-10-26",
+  "rules": {
+    "enrollment_window_days": 30,
+    "benefits_eligible_min_weekly_hours": 30,
+    "benefit_types": ["medical", "dental", "vision"],
+    "dependent_proof": {"spouse": "marriage certificate", "child": "birth certificate"},
+    "tier_dependents": {
+      "employee": [],
+      "employee_spouse": ["spouse"],
+      "employee_children": ["child"],
+      "family": ["spouse", "child"]
+    }
+  },
+  "plans": {
+    "medical": {
+      "Bronze HMO": {"employee": 45.00, "employee_spouse": 110.00, "employee_children": 95.00, "family": 160.00},
+      "Silver PPO": {"employee": 78.00, "employee_spouse": 165.00, "employee_children": 140.00, "family": 230.00},
+      "Gold HMO": {"employee": 120.00, "employee_spouse": 240.00, "employee_children": 210.00, "family": 320.00}
+    },
+    "dental": {
+      "Basic Dental": {"employee": 8.00, "employee_spouse": 16.00, "employee_children": 15.00, "family": 24.00},
+      "Plus Dental": {"employee": 14.00, "employee_spouse": 28.00, "employee_children": 26.00, "family": 40.00}
+    },
+    "vision": {
+      "Standard Vision": {"employee": 4.00, "employee_spouse": 8.00, "employee_children": 7.50, "family": 11.00}
+    }
+  },
+  "retirement_plan": {
+    "name": "401(k) Savings Plan",
+    "eligible_after_days": 0,
+    "match_rule": "Employer matches 100% of your contribution up to 4% of pay",
+    "match_up_to_percent": 4,
+    "contribution_options_percent": [0, 1, 2, 3, 4, 5, 6, 8, 10]
+  },
+  "vendors": {
+    "medical": "Acme Health (medical carrier)",
+    "dental": "Bright Dental (dental carrier)",
+    "vision": "ClearView (vision carrier)",
+    "retirement": "Summit Retirement (401(k) provider)"
+  },
+  "new_hires": {
+    "E2001": {
+      "name": "Test New Hire A",
+      "start_date": "2026-10-19",
+      "weekly_hours": 40,
+      "work_state": "NY",
+      "elections": {
+        "medical": {"status": "elected", "plan": "Silver PPO", "tier": "employee_spouse"},
+        "dental": {"status": "not_started"},
+        "vision": {"status": "waived"},
+        "retirement": {"status": "not_started"}
+      },
+      "dependents": [{"name": "Spouse of A", "relationship": "spouse", "proof_received": false}]
+    },
+    "E2002": {
+      "name": "Test New Hire B",
+      "start_date": "2026-09-30",
+      "weekly_hours": 40,
+      "work_state": "NY",
+      "elections": {
+        "medical": {"status": "elected", "plan": "Gold HMO", "tier": "employee"},
+        "dental": {"status": "elected", "plan": "Basic Dental", "tier": "employee"},
+        "vision": {"status": "waived"},
+        "retirement": {"status": "elected", "percent": 4}
+      },
+      "dependents": []
+    },
+    "E2003": {
+      "name": "Test New Hire C",
+      "start_date": "2026-10-12",
+      "weekly_hours": 20,
+      "work_state": "NY",
+      "elections": {
+        "medical": {"status": "elected", "plan": "Bronze HMO", "tier": "employee"},
+        "dental": {"status": "waived"},
+        "vision": {"status": "waived"},
+        "retirement": {"status": "elected", "percent": 2}
+      },
+      "dependents": []
+    },
+    "E2004": {
+      "name": "Test New Hire D",
+      "start_date": "2026-09-28",
+      "weekly_hours": 40,
+      "work_state": "NY",
+      "elections": {
+        "medical": {"status": "elected", "plan": "Silver PPO", "tier": "employee"},
+        "dental": {"status": "elected", "plan": "Plus Dental", "tier": "employee"},
+        "vision": {"status": "elected", "plan": "Standard Vision", "tier": "employee"},
+        "retirement": {"status": "elected", "percent": 6}
+      },
+      "dependents": []
+    }
+  },
+  "vendor_confirmations": {
+    "E2004": {
+      "medical": {"status": "confirmed", "plan": "Silver PPO", "tier": "family"},
+      "dental": {"status": "pending"},
+      "vision": {"status": "confirmed", "plan": "Standard Vision", "tier": "employee"},
+      "retirement": {"status": "confirmed", "percent": 6}
+    }
+  },
+  "leave_policy": {
+    "leave_types": {
+      "own_health": {"label": "Your own serious health condition", "required_documents": ["medical certification"]},
+      "family_care": {"label": "Caring for a family member", "required_documents": ["medical certification for the family member"]},
+      "bonding": {"label": "Bonding with a new child", "required_documents": ["birth or placement record"]},
+      "personal": {"label": "Personal leave", "required_documents": []}
+    }
+  }
+}

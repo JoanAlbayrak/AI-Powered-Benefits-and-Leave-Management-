@@ -1,0 +1,11 @@
+{
+  "_note": "Made-up test records only. Never put real employee data in this file.",
+  "as_of": "2026-10-15T09:00:00Z",
+  "employees": {
+    "E1001": {"name": "Test Person A", "hours_worked_12mo": 1850, "months_of_service": 38, "leave_balance_hours": 120},
+    "E1002": {"name": "Test Person B", "hours_worked_12mo": 1310, "months_of_service": 14, "leave_balance_hours": 0},
+    "E1003": {"name": "Test Person C", "hours_worked_12mo": 900, "months_of_service": 7, "leave_balance_hours": 16},
+    "E1004": {"name": "Test Person D (bad data)", "hours_worked_12mo": 1600, "months_of_service": 24, "leave_balance_hours": "forty"},
+    "E1005": {"name": "Test Person E (missing balance)", "hours_worked_12mo": 1700, "months_of_service": 30}
+  }
+}

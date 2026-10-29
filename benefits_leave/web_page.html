@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Benefits &amp; Leave Agents</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --ink: #1f2a44; --muted: #5b6475; --line: #e3e6ec;
+    --accent: #2f5d8a; --accent-ink: #ffffff;
+    --green: #1f7a4d; --green-bg: #e6f4ec; --red: #b42318; --red-bg: #fdecea;
+    --amber: #8a5a00; --amber-bg: #fff4dc; --blue-bg: #e8eff7;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 17px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 28px 16px 48px; }
+  h1 { margin: 0; font-size: 30px; letter-spacing: -0.02em; }
+  .sub { margin: 4px 0 20px; color: var(--muted); }
+  .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+  .tab { border: 1px solid var(--line); background: var(--card); padding: 10px 22px; border-radius: 999px;
+         font: inherit; font-weight: 600; cursor: pointer; color: var(--ink); }
+  .tab.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  label { display: block; font-size: 14px; color: var(--muted); margin: 10px 0 4px; }
+  select, input, textarea { width: 100%; padding: 10px; font: inherit; color: inherit;
+    border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+  textarea { min-height: 70px; resize: vertical; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .row > * { flex: 1; min-width: 180px; }
+  .checks label { display: flex; gap: 8px; align-items: center; color: var(--ink); font-size: 15px; }
+  .checks input { width: auto; }
+  button.primary { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 10px;
+    padding: 11px 22px; font: inherit; font-weight: 600; cursor: pointer; margin-top: 14px; }
+  button.small { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 7px 14px;
+    font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; color: var(--ink); }
+  button.small.go { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button:disabled { opacity: 0.6; cursor: wait; }
+  .hidden { display: none; }
+  .pill { display: inline-block; font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+  .pill.ok { background: var(--green-bg); color: var(--green); }
+  .pill.warn { background: var(--amber-bg); color: var(--amber); }
+  .pill.bad { background: var(--red-bg); color: var(--red); }
+  .pill.info { background: var(--blue-bg); color: var(--accent); }
+  ul.list { margin: 6px 0 0; padding-left: 20px; }
+  .label { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-top: 12px; }
+  .ai { background: var(--blue-bg); border-radius: 10px; padding: 12px 14px; margin-top: 12px; white-space: pre-wrap; }
+  .note { color: var(--muted); font-size: 14px; margin-top: 8px; }
+  .err { background: var(--red-bg); color: var(--red); border-radius: 10px; padding: 10px 14px; margin-top: 12px; }
+  .case-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  .actions input { flex: 1; min-width: 220px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 6px; }
+  th, td { text-align: left; padding: 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .spin { display: inline-block; width: 16px; height: 16px; border: 3px solid var(--line); border-top-color: var(--accent);
+          border-radius: 50%; animation: s 0.8s linear infinite; vertical-align: -3px; margin-right: 6px; }
+  @keyframes s { to { transform: rotate(360deg); } }
+  footer { color: var(--muted); font-size: 14px; text-align: center; margin-top: 24px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Benefits &amp; Leave Agents</h1>
+  <p class="sub">Employees enroll and request leave themselves. AI agents check what's missing. HR reviews and decides.</p>
+  <div class="tabs">
+    <button class="tab on" data-tab="emp">Employee side</button>
+    <button class="tab" data-tab="hr">HR side</button>
+  </div>
+
+  <div id="emp">
+    <div class="card">
+      <h2>Log in (demo)</h2>
+      <select id="who"></select>
+      <p class="note">Pretend login: you only ever see your own information.</p>
+    </div>
+
+    <div class="card" id="enrollCard">
+      <h2>My benefits enrollment</h2>
+      <p>Medical, dental, vision and retirement elections.</p>
+      <button class="primary" id="checkEnroll">Check my enrollment</button>
+      <div id="enrollOut"></div>
+    </div>
+
+    <div class="card" id="leaveCard">
+      <h2>Request a leave of absence</h2>
+      <div class="row">
+        <div><label for="ltype">Leave type</label>
+          <select id="ltype">
+            <option value="">Choose…</option>
+            <option value="own_health">My own serious health condition</option>
+            <option value="family_care">Caring for a family member</option>
+            <option value="bonding">Bonding with a new child</option>
+            <option value="personal">Personal leave</option>
+          </select></div>
+        <div><label for="lstart">Start date</label><input type="date" id="lstart"></div>
+        <div><label for="lend">End date</label><input type="date" id="lend"></div>
+      </div>
+      <label for="lreason">Anything HR should know (optional, no medical details needed)</label>
+      <textarea id="lreason"></textarea>
+      <div class="label">Documents attached</div>
+      <div class="checks">
+        <label><input type="checkbox" value="medical certification"> Medical certification</label>
+        <label><input type="checkbox" value="medical certification for the family member"> Medical certification for the family member</label>
+        <label><input type="checkbox" value="birth or placement record"> Birth or placement record</label>
+      </div>
+      <button class="primary" id="submitLeave">Submit leave request</button>
+      <div id="leaveOut"></div>
+    </div>
+
+    <div class="card">
+      <h2>My requests</h2>
+      <div id="myCases"><p class="note">Nothing yet.</p></div>
+    </div>
+  </div>
+
+  <div id="hr" class="hidden">
+    <div class="card">
+      <h2>HR review queue</h2>
+      <p class="note">Agents prepare each case. Only HR can approve, deny, request information, or send to vendors.</p>
+      <button class="small" id="refresh">Refresh</button>
+    </div>
+    <div id="queue"></div>
+  </div>
+
+  <footer>Demo data only. All employees, plans and vendors are made up.</footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+function el(tag, text, cls) {
+  const n = document.createElement(tag);
+  if (text !== undefined && text !== null) n.textContent = text;
+  if (cls) n.className = cls;
+  return n;
+}
+async function api(path, body) {
+  const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify(body || {}) });
+  return res.json();
+}
+function listBlock(title, items, cls) {
+  const box = el("div");
+  box.append(el("div", title, "label"));
+  if (!items || !items.length) { box.append(el("p", "None", "note")); return box; }
+  const ul = el("ul", null, "list " + (cls || ""));
+  items.forEach((t) => ul.append(el("li", t)));
+  box.append(ul);
+  return box;
+}
+function loading(target, text) { target.replaceChildren(); const p = el("p", null, "note"); p.append(el("span", null, "spin"), text); target.append(p); }
+function aiBlock(target, message, error) {
+  if (message) target.append(el("div", message, "ai"));
+  if (error) target.append(el("div", "AI explanation unavailable: " + error + " The checklist above still comes from the system.", "err"));
+}
+const STATUS = {
+  incomplete: ["Incomplete", "warn"], ready_for_hr_review: ["Ready for HR review", "info"],
+  approved: ["Approved", "ok"], denied: ["Not approved", "bad"], info_requested: ["More info requested", "warn"],
+  vendor_records_ready: ["Vendor records ready", "info"], sent_to_vendors: ["Sent to vendors", "info"],
+  vendor_follow_up: ["Vendor follow-up needed", "warn"], vendor_confirmed: ["Confirmed by vendors", "ok"],
+};
+function pill(status) { const [t, c] = STATUS[status] || [status, "info"]; return el("span", t, "pill " + c); }
+
+// Tabs
+document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("on", x === b));
+  $("emp").classList.toggle("hidden", b.dataset.tab !== "emp");
+  $("hr").classList.toggle("hidden", b.dataset.tab !== "hr");
+  if (b.dataset.tab === "hr") loadQueue();
+}));
+
+// Employee side
+let PEOPLE = [];
+async function loadPeople() {
+  PEOPLE = (await api("/api/people")).people;
+  PEOPLE.forEach((p) => { const o = el("option", `${p.name} (${p.id}, ${p.kind})`); o.value = p.id; $("who").append(o); });
+  onWho();
+}
+function me() { return PEOPLE.find((p) => p.id === $("who").value); }
+function onWho() {
+  const p = me();
+  $("enrollCard").classList.toggle("hidden", p.kind !== "new hire");
+  $("leaveCard").classList.toggle("hidden", p.kind === "new hire");
+  $("enrollOut").replaceChildren(); $("leaveOut").replaceChildren();
+  loadMyCases();
+}
+$("who").addEventListener("change", onWho);
+
+async function loadMyCases() {
+  const { cases } = await api("/api/employee/cases", { employee_id: $("who").value });
+  const box = $("myCases"); box.replaceChildren();
+  if (!cases.length) { box.append(el("p", "Nothing yet.", "note")); return; }
+  cases.forEach((c) => {
+    const row = el("div", null, "case-head");
+    const what = c.kind === "leave" ? `Leave: ${c.leave_type || "type not chosen"}` : "Benefits enrollment";
+    row.append(el("b", `${c.id} · ${what}`), pill(c.status));
+    box.append(row);
+    if (c.employee_update) box.append(el("p", c.employee_update, "note"));
+  });
+}
+
+$("checkEnroll").addEventListener("click", async () => {
+  const out = $("enrollOut"); const btn = $("checkEnroll"); btn.disabled = true;
+  loading(out, "Checking your elections… (10–30 seconds)");
+  const r = await api("/api/employee/enrollment", { employee_id: $("who").value });
+  btn.disabled = false; out.replaceChildren();
+  if (r.error) { out.append(el("div", r.error, "err")); return; }
+  const e = r.enrollment;
+  const head = el("div", null, "case-head");
+  head.append(el("b", `Deadline ${e.deadline} · ${e.days_left} days left`), pill(r.case.status));
+  out.append(head, listBlock("Done", e.done), listBlock("Still to do", e.missing));
+  if (e.notes.length) out.append(listBlock("Good to know", e.notes));
+  aiBlock(out, r.message, r.ai_error);
+  loadMyCases();
+});
+
+$("submitLeave").addEventListener("click", async () => {
+  const out = $("leaveOut"); const btn = $("submitLeave"); btn.disabled = true;
+  loading(out, "Checking your request… (10–30 seconds)");
+  const docs = [...document.querySelectorAll(".checks input:checked")].map((x) => x.value);
+  const r = await api("/api/employee/leave", { employee_id: $("who").value, leave_type: $("ltype").value,
+    start_date: $("lstart").value, end_date: $("lend").value, reason: $("lreason").value, documents_attached: docs });
+  btn.disabled = false; out.replaceChildren();
+  if (r.error) { out.append(el("div", r.error, "err")); return; }
+  const head = el("div", null, "case-head");
+  head.append(el("b", `Request ${r.case.id} sent to HR`), pill(r.case.status));
+  out.append(head, listBlock("Still needed", r.missing));
+  aiBlock(out, r.message, r.ai_error);
+  loadMyCases();
+});
+
+// HR side
+async function loadQueue() {
+  const { cases } = await api("/api/hr/queue");
+  const q = $("queue"); q.replaceChildren();
+  cases.slice().reverse().forEach((c) => q.append(caseCard(c)));
+}
+$("refresh").addEventListener("click", loadQueue);
+
+function caseCard(c) {
+  const card = el("div", null, "card");
+  const head = el("div", null, "case-head");
+  const who = PEOPLE.find((p) => p.id === c.employee_id);
+  head.append(el("b", `${c.id} · ${c.kind === "leave" ? "Leave request" : "Benefits enrollment"} · ${who ? who.name : c.employee_id} (${c.employee_id})`), pill(c.status));
+  card.append(head);
+
+  if (c.kind === "enrollment") {
+    const e = c.enrollment;
+    card.append(el("p", `Deadline ${e.deadline} (${e.days_left} days left) · state: ${e.enrollment_state.replaceAll("_", " ")}`, "note"));
+    card.append(listBlock("Elections", e.done), listBlock("Missing", e.missing), listBlock("HR flags", e.hr_flags));
+  } else {
+    const k = c.check;
+    card.append(el("p", `${k.leave_type_label || "Leave type missing"} · ${c.request.start_date || "?"} to ${c.request.end_date || "?"}`, "note"));
+    card.append(listBlock("Missing", k.missing_fields.concat(k.missing_documents.map((d) => "Document: " + d))));
+    card.append(el("div", "FMLA pre-check (not a decision)", "label"), el("p", k.fmla_precheck.detail));
+    if (c.request.reason) card.append(el("div", "Employee's note (unverified)", "label"), el("p", c.request.reason));
+  }
+  if (c.ai && c.ai.hr_summary) card.append(el("div", "AI summary for HR", "label"), el("div", c.ai.hr_summary, "ai"));
+
+  if (c.handoff) {
+    const h = c.handoff;
+    card.append(el("div", "Handoff: Enrollment → Vendor Agent", "label"),
+      el("p", `${h.records.length} approved records frozen on ${h.approved_as_of}` +
+              (h.hr_reason ? ` · HR note: ${h.hr_reason}` : ""), "note"));
+  }
+  if (c.vendor && c.vendor.records) card.append(vendorBlock(c.vendor));
+  card.append(actions(c));
+  card.append(listBlock("History", c.history));
+  return card;
+}
+
+function vendorBlock(v) {
+  const box = el("div");
+  box.append(el("div", "Vendor-ready records (not sent by the system)", "label"));
+  const t = el("table"); const h = el("tr");
+  ["Vendor", "Benefit", "Details"].forEach((x) => h.append(el("th", x))); t.append(h);
+  v.records.forEach((r) => {
+    const tr = el("tr");
+    const details = r.benefit === "retirement" ? `${r.contribution_percent}% contribution`
+      : `${r.plan}, ${r.tier.replaceAll("_", " + ")}, starts ${r.coverage_start}` + (r.dependents.length ? `, dependents: ${r.dependents.join(", ")}` : "");
+    tr.append(el("td", r.vendor), el("td", r.benefit), el("td", details)); t.append(tr);
+  });
+  box.append(t);
+  if (v.reconciliation) {
+    box.append(el("div", "Vendor confirmations", "label"));
+    const t2 = el("table"); const h2 = el("tr");
+    ["Vendor", "Result", "Detail"].forEach((x) => h2.append(el("th", x))); t2.append(h2);
+    v.reconciliation.forEach((r) => { const tr = el("tr"); tr.append(el("td", r.vendor), el("td", r.result.replaceAll("_", " ")), el("td", r.detail)); t2.append(tr); });
+    box.append(t2);
+    if (v.ai && v.ai.hr_summary) box.append(el("div", v.ai.hr_summary, "ai"));
+    if (v.follow_ups && v.follow_ups.length) {
+      box.append(el("div", "Follow-up drafts (HR sends)", "label"));
+      v.follow_ups.forEach((f) => { box.append(el("b", `${f.vendor}: ${f.issue}`)); box.append(el("div", f.draft_message, "ai")); });
+    }
+    if (v.ai_error) box.append(el("div", "AI summary unavailable: " + v.ai_error, "err"));
+  }
+  return box;
+}
+
+function actions(c) {
+  const box = el("div", null, "actions");
+  const msg = el("div");
+  async function act(path, body, btn) {
+    btn.disabled = true; loading(msg, "Working…");
+    const r = await api(path, body);
+    btn.disabled = false;
+    if (r.error) { msg.replaceChildren(el("div", r.error, "err")); return; }
+    loadQueue();
+  }
+  if (["ready_for_hr_review", "incomplete"].includes(c.status)) {
+    const reason = el("input"); reason.placeholder = "Reason (required to deny, request info, or approve an exception)";
+    box.append(reason);
+    [["approve", "Approve"], ["request_info", "Request info"], ["deny", "Deny"]].forEach(([d, label]) => {
+      const b = el("button", label, "small" + (d === "approve" ? " go" : ""));
+      b.addEventListener("click", () => act("/api/hr/decide", { case_id: c.id, decision: d, reason: reason.value }, b));
+      box.append(b);
+    });
+  }
+  const vendorActions = { approved: ["Prepare vendor records", "/api/hr/vendor/prepare"],
+    vendor_records_ready: ["Mark sent to vendors", "/api/hr/vendor/sent"],
+    sent_to_vendors: ["Check vendor confirmations", "/api/hr/vendor/check"],
+    vendor_follow_up: ["Check vendor confirmations again", "/api/hr/vendor/check"] };
+  if (c.kind === "enrollment" && vendorActions[c.status]) {
+    const [label, path] = vendorActions[c.status];
+    const b = el("button", label, "small go");
+    b.addEventListener("click", () => act(path, { case_id: c.id }, b));
+    box.append(b);
+  }
+  const wrap = el("div"); wrap.append(box, msg);
+  return wrap;
+}
+
+loadPeople();
+</script>
+</body>
+</html>
