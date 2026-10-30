@@ -6,17 +6,41 @@ Opens http://127.0.0.1:8001 with two sides: Employee and HR. Press Ctrl + C to s
 """
 
 import json
+import mimetypes
 import sys
 import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 from benefits_leave.workflow import CaseStore, WorkflowError
 from benefits_leave import checks
 from benefits_leave.hr_lookup import load_fake_hr_data
 
 PAGE = (Path(__file__).resolve().parent / "web_page.html").read_bytes()
+FRONTEND = Path(__file__).resolve().parent / "frontend"
+
+
+def frontend_asset(request_path):
+    """Serve only frontend files; never expose repository or employee data files."""
+    path = unquote(urlsplit(request_path).path)
+    if path in ("/", "/index.html"):
+        path = "/assets/index.html"
+    if not path.startswith("/assets/"):
+        return None
+    relative = path.removeprefix("/assets/")
+    candidate = (FRONTEND / relative).resolve()
+    if not candidate.is_relative_to(FRONTEND.resolve()) or not candidate.is_file():
+        return None
+    if candidate.suffix not in (".html", ".css", ".js", ".svg", ".png", ".ico"):
+        return None
+    content_type = mimetypes.guess_type(candidate.name)[0] or "application/octet-stream"
+    if candidate.suffix == ".js":
+        content_type = "text/javascript"
+    if candidate.suffix in (".html", ".css", ".js", ".svg"):
+        content_type += "; charset=utf-8"
+    return content_type, candidate.read_bytes()
 
 
 def people(store):
@@ -117,10 +141,14 @@ def make_handler(store):
             self.wfile.write(data)
 
         def do_GET(self):
-            if self.path in ("/", "/index.html"):
+            if urlsplit(self.path).path == "/legacy":
                 self._send(200, "text/html; charset=utf-8", PAGE)
             else:
-                self._send(404, "text/plain", b"Not found")
+                asset = frontend_asset(self.path)
+                if asset is None:
+                    self._send(404, "text/plain; charset=utf-8", b"Not found")
+                else:
+                    self._send(200, *asset)
 
         def do_POST(self):
             try:
