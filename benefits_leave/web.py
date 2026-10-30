@@ -13,6 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from benefits_leave.workflow import CaseStore, WorkflowError
+from benefits_leave import checks
 from benefits_leave.hr_lookup import load_fake_hr_data
 
 PAGE = (Path(__file__).resolve().parent / "web_page.html").read_bytes()
@@ -35,10 +36,45 @@ def employee_view(case):
     return view
 
 
+def employee_overview(store, employee_id):
+    """Read-only UI model: existing checks, no agent calls or case creation.
+
+    The demo selects identity in the browser. This projection removes HR-only
+    fields; it is not a replacement for production authentication.
+    """
+    person = next((p for p in people(store) if p["id"] == employee_id), None)
+    if person is None:
+        raise WorkflowError("Employee not found")
+    enrollment = None
+    selections = []
+    if person["kind"] == "new hire":
+        result = checks.enrollment_status(employee_id, store.data)
+        # Keep eligibility flags and internal completion classifications HR-only.
+        enrollment = {k: result[k] for k in ("name", "deadline", "days_left", "done", "missing", "notes", "as_of")}
+        hire = store.data["new_hires"][employee_id]
+        for benefit in (*store.data["rules"]["benefit_types"], "retirement"):
+            election = hire["elections"].get(benefit, {"status": "not_started"})
+            selection = {"benefit": benefit, "status": election["status"]}
+            if benefit == "retirement":
+                selection["percent"] = election.get("percent")
+            else:
+                selection.update(plan=election.get("plan"), tier=election.get("tier"))
+                selection["cost_per_paycheck"] = store.data["plans"][benefit].get(election.get("plan"), {}).get(election.get("tier"))
+            selections.append(selection)
+    return {"employee": person, "enrollment": enrollment, "selections": selections,
+            "cases": [employee_view(c) for c in store.employee_cases(employee_id)],
+            "as_of": store.data["as_of"],
+            "retirement_match": store.data["retirement_plan"]["match_rule"],
+            "leave_types": [{"id": key, "label": value["label"], "required_documents": value["required_documents"]}
+                            for key, value in store.data["leave_policy"]["leave_types"].items()]}
+
+
 def handle(store, path, body):
     eid = body.get("employee_id", "")
     if path == "/api/people":
         return {"people": people(store)}
+    if path == "/api/employee/overview":
+        return employee_overview(store, eid)
     if path == "/api/employee/enrollment":
         result, case = store.check_enrollment(eid)
         s = result["status"]
