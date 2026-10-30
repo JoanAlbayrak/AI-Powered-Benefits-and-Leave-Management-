@@ -2,7 +2,7 @@
 
 An AI-powered Benefits and Leave Management system with three agents. Employees log in to do their own benefits enrollment and leave requests, instead of sending paper or emailed forms. The agents check what's missing and explain it. **HR reviews every case and makes every decision.**
 
-> **Status:** both workflows run end to end on a demo web page, and all tests pass (`python3 -m unittest`).
+> **Status:** the redesigned read-only workspace is available at `/`. The existing end-to-end workflow demo remains at `/legacy`. Core workflow actions will be connected to the new interface next.
 
 ## Team
 
@@ -41,7 +41,11 @@ An AI-powered Benefits and Leave Management system with three agents. Employees 
 ```bash
 .venv/bin/python -m benefits_leave.web
 ```
-Your browser opens `http://127.0.0.1:8001` with an **Employee side** and an **HR side**. The page runs only on your own computer. Press **Ctrl + C** in Terminal to stop.
+Your browser opens `http://127.0.0.1:8001` with separate **Employee preview** and **HR preview** workspaces. The redesigned interface reads the existing fictional records without running agents or changing cases.
+
+Open `http://127.0.0.1:8001/legacy` for the original connected enrollment, leave, HR decision, and vendor workflows. No API key or frontend build is needed to browse the scaffold. Role switching is a demo feature, not production authentication. Cases currently reset when the Python server restarts.
+
+The app runs only on your computer. Press **Ctrl + C** in Terminal to stop. See [Frontend scaffold](docs/FRONTEND-SCAFFOLD.md) for structure, boundaries, and next steps.
 
 **Demo people (all made up):**
 - New hires: E2001 (incomplete), E2002 (complete), E2003 (part-time, needs an HR exception), E2004 (already sent to vendors, with a vendor mismatch).
@@ -52,6 +56,11 @@ Your browser opens `http://127.0.0.1:8001` with an **Employee side** and an **HR
 No API key needed. The tests use a pretend Claude:
 ```bash
 python3 -m unittest
+```
+
+Optional frontend behavior checks use Node’s built-in test runner, with no packages to install:
+```bash
+node --test tests/frontend.test.mjs
 ```
 
 ## How it stays safe
@@ -79,9 +88,11 @@ benefits_leave/
   workflow.py     the two workflows, the HR queue and the case store
   hr_lookup.py    read-only HR lookup for the FMLA pre-check
   web.py          the demo web server (local only)
-  web_page.html   the Employee and HR page
+  web_page.html   original workflow demo, available at /legacy
+  frontend/       modular read-only employee and HR workspace
 data/             made-up employees, plans, vendors and leave policy
-tests/            automated tests
+tests/            Python and optional Node behavior tests
+docs/             architecture and development handoff notes
 ```
 
 ## Out of scope

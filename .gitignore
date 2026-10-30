@@ -235,3 +235,9 @@ data/real/
 # --- macOS ---
 .DS_Store
 
+
+# Local design exports, working files, and generated handoff artifacts.
+# Runtime UI source is versioned in benefits_leave/frontend/.
+/design-reference/
+/work/
+/outputs/
