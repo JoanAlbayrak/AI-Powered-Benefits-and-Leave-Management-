@@ -1,6 +1,6 @@
 # Frontend scaffold
 
-The root page is the new read-only workspace. `/legacy` retains the original working workflow demo. Both are served by the same Python application on localhost.
+The root page connects the benefits workflow while keeping ordinary page browsing read-only. The leave form remains a preview. `/legacy` retains the original working workflow demo. Both are served by the same Python application on localhost. See [Benefits workflow](BENEFITS-WORKFLOW.md) for the current integration checkpoint.
 
 ## Run
 
@@ -18,6 +18,8 @@ Open http://127.0.0.1:8001. No frontend build, package installation, API key, or
 - `frontend/js/app.js`: rendering, loading/error state, navigation, profile selection, and queue filtering.
 - `frontend/js/state.js`: role-specific routes and optional demo-profile preference.
 - `frontend/js/api.js`: one same-origin request boundary, timeout handling, and backend error translation.
+- `frontend/js/workflows.js`: one in-flight action and scoped status reconciliation after an uncertain response.
+- `frontend/js/workflow-ui.js`: enrollment action, HR decision and vendor action/draft components.
 - `frontend/js/components.js`: common components, escaping, formatters, icons, and status semantics.
 - `frontend/js/views/employee.js`: overview, benefits snapshot, leave-form preview, next steps, and employee case detail.
 - `frontend/js/views/hr.js`: queue, vendor overview, derived next steps, case history, and HR case detail.
@@ -39,16 +41,17 @@ All dates and countdowns use the backend's demo snapshot date, which is displaye
 - HR queue, status filters, search, case details, approved handoff records, and history.
 - Separate navigation for employee and HR previews.
 - Responsive layout, accessible navigation controls, status labels, loading/error/empty states.
+- Explicit enrollment checks and saved employee-safe guidance; HR decisions; approved vendor preparation, simulated sending and confirmation review/drafts.
 
 ## Deliberately disconnected
 
-The new UI does not submit leave, edit elections, upload documents, run agents, approve/deny, prepare/send vendor records, or create persistent tasks. These controls are labeled as previews or disabled. The original workflow remains accessible through `/legacy`.
+The new UI does not submit leave, edit elections, upload documents or create persistent tasks. These controls remain previews or disabled. No interface sends actual provider records or notices. Evidence clarification and specialist consultation remain proposed. The original workflow remains accessible through `/legacy`.
 
 Next steps displayed from enrollment findings or case status are derived views, not a new persistent task engine. Assignment, due dates beyond existing enrollment rules, evidence lifecycle, reminders, and secure documents require their own implementation.
 
 ## Next development slice
 
-Connect the redesigned enrollment check to the existing enrollment endpoint, then HR review and vendor actions. Preserve backend guards and the frozen approved handoff. Follow with leave submission and correction/resubmission. Do not add business rules in presentation code.
+Enrollment checking, HR review and vendor actions are connected. Next: live-model configuration/readiness, scoped evidence clarification and specialist consultation, then leave submission and correction/resubmission. Preserve backend guards and the frozen approved handoff. Do not add business rules in presentation code.
 
 ## Verification
 

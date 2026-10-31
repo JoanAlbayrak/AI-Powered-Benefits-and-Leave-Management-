@@ -1,6 +1,6 @@
 # Workflow contracts
 
-**Design scaffold only.** The current endpoints below exist. The proposed tools, models, endpoint paths and output fields later in this document do not exist yet. Agree them before implementation; do not build a frontend against a proposed route as if it were already available.
+The current endpoints below exist; enrollment, HR decisions and vendor actions are now wired into the new UI. The proposed tools, models, endpoint paths and output fields later in this document do not exist yet. Agree them before implementation; do not build a frontend against a proposed route as if it were already available.
 
 ## Ownership boundaries
 
@@ -32,6 +32,8 @@ All listed routes currently use JSON POST requests. The existing server reports 
 | `/api/hr/vendor/check` | `case_id` | Checks provider confirmations and runs Vendor Agent; returns `case` |
 
 Decision values: `approve`, `deny`, `request_info`. `documents_attached` is a list of synthetic document labels, not actual file upload. The current server uses demo identity selection rather than authorization; projection filtering is not production access control.
+
+Enrollment case projections now also include employee-only `guidance` and `ai_error`, so the last explanation or unavailability message survives a workspace refresh. HR-only summaries, handoffs and history are still excluded. New UI mutations allow up to 120 seconds, are never automatically retried, and block other mutations after an ambiguous transport result until a successful read of the originating workspace. This is browser-local coordination, not server-side idempotency or multi-user locking.
 
 ### Existing case states
 
