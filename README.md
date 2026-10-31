@@ -1,5 +1,7 @@
 # AI-Powered Benefits and Leave Management
 
+**Team handoff:** start with [Team start here](docs/TEAM-START-HERE.md) for the current implementation boundaries, local setup and partner review checklist. The [execution board](docs/EXECUTION-BOARD.md) and [workflow contracts](docs/WORKFLOW-CONTRACTS.md) scaffold the next phase; those features are **planned, not implemented**. Read the [project proposal](docs/BENEFITS-LEAVE-PROPOSAL.md) or its [visual PDF](docs/reports/Benefits-and-Leave-Case-Team-Report.pdf) for the domain explanation and agent design.
+
 An AI-powered Benefits and Leave Management system with three agents. Employees log in to do their own benefits enrollment and leave requests, instead of sending paper or emailed forms. The agents check what's missing and explain it. **HR reviews every case and makes every decision.**
 
 > **Status:** the redesigned read-only workspace is available at `/`. The existing end-to-end workflow demo remains at `/legacy`. Core workflow actions will be connected to the new interface next.
