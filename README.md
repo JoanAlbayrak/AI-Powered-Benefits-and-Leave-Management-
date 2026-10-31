@@ -1,10 +1,10 @@
 # AI-Powered Benefits and Leave Management
 
-**Team handoff:** start with [Team start here](docs/TEAM-START-HERE.md) for the current implementation boundaries, local setup and partner review checklist. The [execution board](docs/EXECUTION-BOARD.md) and [workflow contracts](docs/WORKFLOW-CONTRACTS.md) scaffold the next phase; those features are **planned, not implemented**. Read the [project proposal](docs/BENEFITS-LEAVE-PROPOSAL.md) or its [visual PDF](docs/reports/Benefits-and-Leave-Case-Team-Report.pdf) for the domain explanation and agent design.
+**Team handoff:** start with [Team start here](docs/TEAM-START-HERE.md) for implementation boundaries and local setup. The [execution board](docs/EXECUTION-BOARD.md) and [workflow contracts](docs/WORKFLOW-CONTRACTS.md) distinguish connected benefits actions from remaining proposals. See the [benefits integration checkpoint](docs/BENEFITS-WORKFLOW.md) for what to try now, or the [project proposal](docs/BENEFITS-LEAVE-PROPOSAL.md) and [visual PDF](docs/reports/Benefits-and-Leave-Case-Team-Report.pdf) for the domain and agent design.
 
 An AI-powered Benefits and Leave Management system with three agents. Employees log in to do their own benefits enrollment and leave requests, instead of sending paper or emailed forms. The agents check what's missing and explain it. **HR reviews every case and makes every decision.**
 
-> **Status:** the redesigned read-only workspace is available at `/`. The existing end-to-end workflow demo remains at `/legacy`. Core workflow actions will be connected to the new interface next.
+> **Status:** the redesigned workspace at `/` connects enrollment checks, HR decisions and vendor review. The leave form remains a preview; its original connected workflow is at `/legacy`. Agent-to-agent consultation and evidence clarification are planned next.
 
 ## Team
 
@@ -34,7 +34,7 @@ An AI-powered Benefits and Leave Management system with three agents. Employees 
    ```
 3. Make your own secrets file, then open `.env` and paste **your own** API key:
    ```bash
-   cp .env.example .env
+   cp -n .env.example .env
    ```
    `.env` is in `.gitignore`, so it is never committed. Each teammate keeps their own key. Never share keys in git, chat, Slack or screenshots.
 
@@ -43,7 +43,7 @@ An AI-powered Benefits and Leave Management system with three agents. Employees 
 ```bash
 .venv/bin/python -m benefits_leave.web
 ```
-Your browser opens `http://127.0.0.1:8001` with separate **Employee preview** and **HR preview** workspaces. The redesigned interface reads the existing fictional records without running agents or changing cases.
+Your browser opens `http://127.0.0.1:8001` with separate **Employee preview** and **HR preview** workspaces. Browsing reads fictional records without running agents or changing cases. Explicit benefits action buttons run the connected workflow.
 
 Open `http://127.0.0.1:8001/legacy` for the original connected enrollment, leave, HR decision, and vendor workflows. No API key or frontend build is needed to browse the scaffold. Role switching is a demo feature, not production authentication. Cases currently reset when the Python server restarts.
 
@@ -57,7 +57,7 @@ The app runs only on your computer. Press **Ctrl + C** in Terminal to stop. See 
 
 Anyone can try the demo here, with no install and no login: **https://joanalbayrak.github.io/AI-Powered-Benefits-and-Leave-Management-/**
 
-- It's the same page and the same checks and HR workflow, running in the browser (`site/demo.js` mirrors the Python code).
+- It uses the original workflow demo page, running in the browser (`site/demo.js` mirrors the Python checks). It is separate from the redesigned local interface.
 - **No API key is used.** The AI agents' messages are examples written from the check results. The live AI version is the laptop version above.
 - Nothing is saved: reloading the page starts the demo over.
 - GitHub Pages serves the `docs/` folder. After changing `benefits_leave/web_page.html` or `site/demo.js`, rebuild it and commit `docs/index.html`:
@@ -104,7 +104,7 @@ benefits_leave/
   hr_lookup.py    read-only HR lookup for the FMLA pre-check
   web.py          the demo web server (local only)
   web_page.html   original workflow demo, available at /legacy
-  frontend/       modular read-only employee and HR workspace
+  frontend/       employee and HR workspace with connected benefits actions
 data/             made-up employees, plans, vendors and leave policy
 tests/            Python and optional Node behavior tests
 docs/             architecture and development handoff notes

@@ -3,11 +3,61 @@ import { navigation, routeFromHash, readEmployeePreference, saveEmployeePreferen
 import { icon, escape, loadingView, notice, buttonLink, pageHeader } from './components.js';
 import { employeeView } from './views/employee.js';
 import { hrView } from './views/hr.js';
+import { WorkflowController } from './workflows.js';
 
 const state = { people: [], employeeId: readEmployeePreference(), data: null, menuOpen: false };
 let loadVersion = 0;
 const app = document.getElementById('app');
 const main = () => document.getElementById('main');
+const workflow = new WorkflowController();
+const feedback = new Map();
+let uncertainOrigin = null;
+
+function contextKey(route = routeFromHash(location.hash), employeeId = state.employeeId) {
+  return `${route.role}:${route.role === 'employee' ? employeeId : ''}:${route.page}:${route.caseId || ''}`;
+}
+
+function paintWorkflow() {
+  const region = document.getElementById('workflow-feedback');
+  if (!region) return;
+  const message = feedback.get(contextKey());
+  region.innerHTML = workflow.pending ? notice('A workflow action is running. Please wait; another action cannot be submitted yet.')
+    : workflow.uncertainContext !== null ? notice('An action result has not been confirmed. Refresh its original workspace before taking another action.', 'warning') + '<div class="actions spaced"><button class="btn" id="reconcile-workflow">Refresh latest status</button></div>'
+    : message ? notice(message.text, message.tone) : '';
+  region.hidden = !region.innerHTML;
+  document.querySelectorAll('[data-workflow-action]').forEach(button => { button.disabled = workflow.blocked; });
+  document.querySelectorAll('#hr-decision-form, #vendor-sent-form').forEach(form => {
+    form.setAttribute('aria-busy', String(workflow.pending));
+    form.querySelectorAll('select, textarea, input').forEach(input => { input.disabled = workflow.blocked; });
+  });
+  document.getElementById('reconcile-workflow')?.addEventListener('click', () => {
+    if (!uncertainOrigin) return;
+    state.employeeId = uncertainOrigin.employeeId;
+    if (location.hash !== uncertainOrigin.hash) location.hash = uncertainOrigin.hash;
+    else load();
+  });
+}
+
+async function performAction(action, successText) {
+  if (workflow.blocked) return;
+  const origin = { key: contextKey(), hash: location.hash, employeeId: state.employeeId };
+  const operation = workflow.execute(origin.key, action);
+  paintWorkflow();
+  const outcome = await operation;
+  if (!outcome.accepted) return;
+  if (outcome.error) {
+    feedback.set(origin.key, { text: outcome.error.message, tone: 'error' });
+    if (outcome.error.outcomeUnknown) uncertainOrigin = origin;
+    paintWorkflow();
+    if (origin.key === contextKey()) document.getElementById('workflow-feedback')?.focus();
+    return;
+  }
+  const item = outcome.result.case;
+  feedback.set(origin.key, { text: `${successText}${item ? ` Case ${item.id}.` : ''}`, tone: '' });
+  // A result belongs to the workspace that submitted it, even after navigation.
+  if (origin.key === contextKey()) await load();
+  else paintWorkflow();
+}
 
 function shell(route) {
   const person = state.people.find(item => item.id === state.employeeId);
@@ -35,6 +85,43 @@ function shell(route) {
 
 function bindView() {
   document.getElementById('leave-preview')?.addEventListener('submit', event => event.preventDefault());
+  document.querySelector('[data-workflow-action="enrollment"]')?.addEventListener('click', () => {
+    const employeeId = state.employeeId;
+    performAction(() => api.checkEnrollment(employeeId), 'Enrollment checked. Review the findings below; HR makes the decision.');
+  });
+  const decisionForm = document.getElementById('hr-decision-form');
+  const decision = document.getElementById('hr-decision');
+  decision?.addEventListener('change', () => {
+    document.getElementById('hr-reason').required = decision.value !== 'approve' || decisionForm.dataset.approvalReason === 'true';
+  });
+  decisionForm?.addEventListener('submit', event => {
+    event.preventDefault();
+    const reason = document.getElementById('hr-reason').value.trim();
+    const needsReason = decision.value !== 'approve' || decisionForm.dataset.approvalReason === 'true';
+    if (needsReason && !reason) {
+      feedback.set(contextKey(), { text: 'Add a reason for this decision.', tone: 'error' });
+      paintWorkflow();
+      document.getElementById('hr-reason').focus();
+      return;
+    }
+    const id = decisionForm.dataset.caseId;
+    const selected = decision.value;
+    performAction(() => api.decide(id, selected, reason), 'HR decision recorded.');
+  });
+  document.querySelector('[data-workflow-action="prepare"]')?.addEventListener('click', event => {
+    const id = event.currentTarget.dataset.caseId;
+    performAction(() => api.prepareVendor(id), 'Vendor records prepared from the approved handoff. Nothing was sent.');
+  });
+  const sentForm = document.getElementById('vendor-sent-form');
+  sentForm?.addEventListener('submit', event => {
+    event.preventDefault();
+    const id = sentForm.dataset.caseId;
+    performAction(() => api.markSent(id), 'Simulated sending recorded. No external transmission occurred.');
+  });
+  document.querySelector('[data-workflow-action="vendor-check"]')?.addEventListener('click', event => {
+    const id = event.currentTarget.dataset.caseId;
+    performAction(() => api.checkVendor(id), 'Confirmations checked. Review the comparison and any follow-up drafts below.');
+  });
   const rows = [...document.querySelectorAll('[data-case-row]')];
   let filter = 'all';
   const applyFilters = () => {
@@ -56,11 +143,13 @@ function bindView() {
   });
   document.getElementById('case-search')?.addEventListener('input', applyFilters);
   document.getElementById('retry-load')?.addEventListener('click', load);
+  paintWorkflow();
 }
 
 async function load() {
   const version = ++loadVersion;
   const route = routeFromHash(location.hash);
+  const context = contextKey(route);
   state.data = null;
   state.menuOpen = false;
   shell(route);
@@ -75,13 +164,19 @@ async function load() {
     const data = route.role === 'employee' ? await api.overview(state.employeeId) : await api.queue();
     if (version !== loadVersion) return;
     state.data = { ...data, people: state.people };
-    main().innerHTML = (route.role === 'employee' ? employeeView(route, state.data) : hrView(route, state.data))
-      + `<footer class="footer"><span>Benefits & Leave · Interface foundation</span><span>Read-only views · <a href="/legacy" target="_blank" rel="noopener">Existing workflow demo ${icon('external')}</a></span></footer>`;
+    if (workflow.uncertainContext === context) {
+      workflow.reconcile(context);
+      uncertainOrigin = null;
+      feedback.set(context, { text: 'Latest status refreshed. Review the case before deciding whether another action is needed.', tone: '' });
+    }
+    main().innerHTML = '<div id="workflow-feedback" class="workflow-feedback" role="status" aria-live="polite" tabindex="-1" hidden></div>'
+      + (route.role === 'employee' ? employeeView(route, state.data) : hrView(route, state.data))
+      + `<footer class="footer"><span>Benefits & Leave · Fictional demonstration</span><span>Benefits workflow connected · Leave form preview · <a href="/legacy" target="_blank" rel="noopener">Original demo ${icon('external')}</a></span></footer>`;
     const title = main().querySelector('h1')?.textContent || 'Workspace';
     document.title = `${title} · Benefits & Leave`;
   } catch (error) {
     if (version !== loadVersion) return;
-    main().innerHTML = pageHeader('We couldn’t load this workspace', 'Your information has not been changed.') + notice(error.message, 'error') + `<div class="actions spaced"><button class="btn primary" id="retry-load">${icon('refresh')}Try again</button>${buttonLink('Open existing demo', '/legacy')}</div>`;
+    main().innerHTML = '<div id="workflow-feedback" class="workflow-feedback" role="status" aria-live="polite" tabindex="-1" hidden></div>' + pageHeader('We couldn’t load this workspace', 'A display error does not undo a previously submitted action. Refresh to see its latest status.') + notice(error.message, 'error') + `<div class="actions spaced"><button class="btn primary" id="retry-load">${icon('refresh')}Refresh workspace</button>${buttonLink('Open existing demo', '/legacy')}</div>`;
   } finally {
     if (version === loadVersion) {
       main().setAttribute('aria-busy', 'false');

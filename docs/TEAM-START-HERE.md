@@ -2,7 +2,7 @@
 
 ## What this handoff contains
 
-This is a **documentation and planning scaffold for joint review**. It adds the proposed agent responsibilities, work packages, integration contracts and a shareable report. It does not connect new UI actions or change application behavior. We should review the proposed boundaries together before implementing the next phase.
+The original planning handoff is now followed by a first implementation slice: **enrollment checking, HR decisions and vendor review are connected in the new UI**. See [Benefits workflow](BENEFITS-WORKFLOW.md) for the review route. The agent responsibilities, remaining work packages, proposed contracts and report still guide the next phase.
 
 | Read in this order | Purpose |
 |---|---|
@@ -18,7 +18,7 @@ The requirement known to us is a multi-agent system. No additional grading rubri
 
 | Area | Implemented now | Planned next |
 |---|---|---|
-| Employee/HR interface at `/` | Read-only views, navigation, fictional records, filters and status displays | Connect explicit employee and HR actions |
+| Employee/HR interface at `/` | Read-only browsing plus explicit enrollment, HR decision and vendor actions | Evidence clarification and leave submission |
 | Original interface at `/legacy` | Existing enrollment, leave and vendor workflows | Retain as a reference while integrating the new UI |
 | Three agents | Scoped tools and structured summaries/drafts | Evidence clarification and a useful specialist consultation |
 | Coordination | Code-owned cases and frozen enrollment-to-vendor handoff | Code-routed Vendor-to-Enrollment consultation |
@@ -73,7 +73,7 @@ node --test tests/frontend.test.mjs
 
 Node is only needed for the frontend checks; there is no frontend build or package install. Tests use a fake model and do not validate live model quality, credentials or availability.
 
-Handoff verification on 31 October 2026: **51 Python tests and 7 frontend tests passed**. Local document links were checked, and the shared PDF matches the reviewed report. No live API call was made. The checks were run with available local Python and Node runtimes; each teammate should create their own virtual environment using the setup above.
+Original planning handoff verification on 31 October 2026: 51 Python tests and 7 frontend tests passed. The subsequent benefits integration passes **53 Python tests and 16 frontend tests**; see its checkpoint for browser coverage. No successful live-model call has been validated. Each teammate should create their own virtual environment using the setup above.
 
 ## Where to work
 

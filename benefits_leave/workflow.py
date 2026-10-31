@@ -61,9 +61,10 @@ class CaseStore:
             return result, case   # already decided or with vendors: nothing to reopen
         new_status = "incomplete" if status["missing"] else "ready_for_hr_review"
         if case is None:
-            case = self._new_case("enrollment", employee_id, status=new_status, enrollment=status, ai=result["ai"])
+            case = self._new_case("enrollment", employee_id, status=new_status, enrollment=status,
+                                  ai=result["ai"], ai_error=result["ai_error"])
         else:
-            case.update(status=new_status, enrollment=status, ai=result["ai"])
+            case.update(status=new_status, enrollment=status, ai=result["ai"], ai_error=result["ai_error"])
         self._log(case, f"Enrollment checked: {status['enrollment_state']}")
         return result, case
 

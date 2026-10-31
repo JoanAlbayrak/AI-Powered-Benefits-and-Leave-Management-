@@ -1,6 +1,6 @@
 # Execution board
 
-**Status: proposed work, not started.** This board scaffolds the next development phase. Owners and implementation branches are unassigned until we agree together. Checkboxes below are acceptance criteria, not completed features.
+**Status: P1/P2 implemented on `feat/connect-benefits-workflow`; review pending.** See [Benefits workflow](BENEFITS-WORKFLOW.md) for verification and limits. P0 live-model readiness and P3-P7 remain open. Owners of the remaining work packages are unassigned. Checked items below describe this implementation branch, not a claim that it has been merged.
 
 Target: a presentable local live demo by Sunday evening, ready for Monday, 2 November 2026. Time boxes are estimates, not promises. If time becomes tight, complete and stabilize the first journey before expanding scope.
 
@@ -39,21 +39,21 @@ Two people can work on separate modules after agreeing the contracts. Avoid conc
 
 ## P1: Employee enrollment and HR review
 
-- [ ] Wire explicit enrollment check to the current endpoint; browsing stays read-only.
-- [ ] Show loading, success and recoverable error states without duplicate requests.
-- [ ] Display the created case and HR-only summary in the appropriate workspace.
-- [ ] HR can approve, deny or request information with existing guards and required reasons.
-- [ ] An incomplete enrollment cannot be approved; errors keep the user's input available.
+- [x] Wire explicit enrollment check to the current endpoint; browsing stays read-only.
+- [x] Show loading, success and recoverable error states without duplicate requests.
+- [x] Display the created case and HR-only summary in the appropriate workspace.
+- [x] HR can approve, deny or request information with existing guards and required reasons.
+- [x] An incomplete enrollment cannot be approved; errors keep the user's input available.
 
 Checkpoint: a complete profile reaches HR approval; an incomplete profile remains blocked.
 
 ## P2: Vendor journey
 
-- [ ] HR can prepare records only after approval and explicitly mark them sent.
-- [ ] Compare confirmations against the frozen handoff, not a later election edit.
-- [ ] Show pending, missing, confirmed and discrepant results distinctly.
-- [ ] Display follow-up drafts as drafts; no external sending is added.
-- [ ] Keep employee updates separate from internal provider investigation details.
+- [x] HR can prepare records only after approval and explicitly mark them sent.
+- [x] Compare confirmations against the frozen handoff, not a later election edit.
+- [x] Show pending, missing, confirmed and discrepant results distinctly.
+- [x] Display follow-up drafts as drafts; no external sending is added.
+- [x] Keep employee updates separate from internal provider investigation details.
 
 Checkpoint: the seeded E2004 mismatch is easy to explain in the new interface.
 

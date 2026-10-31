@@ -1,5 +1,7 @@
 # Scaffold handoff
 
+This records the original read-only scaffold milestone. For the subsequently connected benefits workflow and current limits, see [Benefits workflow](BENEFITS-WORKFLOW.md).
+
 **Status: complete.** The new interface foundation is committed locally. Core workflow integration is the next development phase.
 
 ## Delivered
