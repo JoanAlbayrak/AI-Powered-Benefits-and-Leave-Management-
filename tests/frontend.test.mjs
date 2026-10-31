@@ -6,6 +6,7 @@ import { routeFromHash } from '../benefits_leave/frontend/js/state.js';
 import { escape, statusBadge } from '../benefits_leave/frontend/js/components.js';
 import { employeeView } from '../benefits_leave/frontend/js/views/employee.js';
 import { hrView } from '../benefits_leave/frontend/js/views/hr.js';
+import { decisionPanel, enrollmentGuidance, vendorActions, vendorDrafts } from '../benefits_leave/frontend/js/workflow-ui.js';
 
 test('deep links preserve case identity and separate employee and HR views', () => {
   assert.deepEqual(routeFromHash('#/employee/cases/C1'), { role: 'employee', page: 'cases', caseId: 'C1' });
@@ -129,4 +130,36 @@ test('a conclusive workflow rejection leaves the controller ready for corrected 
   const out = await controller.execute('hr:C1', () => { throw new ApiError('A reason is required'); });
   assert.match(out.error.message, /reason/);
   assert.equal(controller.blocked, false);
+});
+
+test('incomplete enrollment blocks approval while leaving reasoned HR options available', () => {
+  const html = decisionPanel({ id: 'C2', kind: 'enrollment', status: 'incomplete', enrollment: { missing: ['Proof'], hr_flags: [] } });
+  assert.match(html, /value="approve" disabled/);
+  assert.match(html, /value="request_info"/);
+  assert.match(html, /id="hr-reason"/);
+  assert.doesNotMatch(decisionPanel({ status: 'approved' }), /<form/);
+});
+
+test('vendor controls follow workflow state and never offer external sending', () => {
+  const item = { id: 'C1', kind: 'enrollment' };
+  assert.equal(vendorActions({ ...item, status: 'ready_for_hr_review' }), '');
+  assert.match(vendorActions({ ...item, status: 'approved' }), /data-workflow-action="prepare"/);
+  const ready = vendorActions({ ...item, status: 'vendor_records_ready' });
+  assert.match(ready, /type="checkbox" name="confirmed" required/);
+  assert.match(ready, /no records will be transmitted/);
+  assert.match(vendorActions({ ...item, status: 'sent_to_vendors' }), /data-workflow-action="vendor-check"/);
+  assert.doesNotMatch(vendorActions({ ...item, status: 'vendor_confirmed' }), /<button/);
+});
+
+test('employee guidance and provider drafts escape generated text and label unavailable AI', () => {
+  const payload = '<img src=x onerror=alert(1)>';
+  const employee = enrollmentGuidance({ status: 'incomplete', guidance: payload, ai_error: payload });
+  const vendor = vendorDrafts({ vendor: { reconciliation: [], ai_error: payload, follow_ups: [{ vendor: payload, issue: payload, draft_message: payload }] } });
+  for (const html of [employee, vendor]) {
+    assert.doesNotMatch(html, /<img/);
+    assert.match(html, /&lt;img/);
+    assert.match(html, /unavailable/);
+  }
+  assert.match(vendor, /rule-based draft templates/);
+  assert.match(vendor, /Draft only/);
 });

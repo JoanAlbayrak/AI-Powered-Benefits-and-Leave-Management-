@@ -1,4 +1,5 @@
 import { icon, escape, label, coverageTier, formatDate, money, badge, statusBadge, buttonLink, emptyState, notice, panel, pageHeader, agentInfo, stageNote, disabledAction, caseName } from '../components.js';
+import { enrollmentActions, enrollmentGuidance } from '../workflow-ui.js';
 const selections = data => data.selections || [];
 const benefitIcon = benefit => ({ medical: 'heart', dental: 'shield', vision: 'eye', retirement: 'savings' }[benefit] || 'shield');
 
@@ -46,8 +47,10 @@ function benefits(data) {
   content += `<div class="spaced">${selectionCards(data)}</div><div class="two-col spaced">`;
   content += panel('Still to do', e.missing.length ? e.missing.map(text => `<div class="list-row"><div class="row-content">${icon('clock')}<div><b>${escape(text)}</b><p>From the enrollment completeness check.</p></div></div>${badge('Action needed', 'warning')}</div>`).join('') : emptyState('No missing items in this snapshot', 'HR may still need to review eligibility or exceptions. This is not an approval.', 'check'));
   content += panel('Retirement match', `<div class="panel-body"><p>${escape(data.retirement_match)}.</p><p class="inline-note">This explains the demo plan rule. Your contribution is your choice.</p>${e.notes.length ? `<div class="spaced">${e.notes.map(note => `<p class="inline-note">${escape(note)}</p>`).join('')}</div>` : ''}</div>`);
-  content += `</div><div class="spaced">${stageNote('This first phase displays existing elections and check results. Editing elections, waivers, and supporting documents will be connected in the core-workflow phase.')}</div>`;
-  return content + agentInfo('Enrollment Agent', 'It will explain these trusted results and write an HR summary. No AI request is made when you open this page.');
+  content += `</div><div class="spaced">${enrollmentActions(data)}</div>`;
+  const item = data.cases.find(value => value.kind === 'enrollment');
+  if (item) content += `<div class="spaced">${enrollmentGuidance(item)}</div>`;
+  return content + `<div class="spaced">${stageNote('Election editing, waivers and document handling remain previews. The check uses the choices already recorded in this fictional profile.')}</div>`;
 }
 
 function leave(data) {
@@ -70,6 +73,7 @@ function caseDetail(data, caseId) {
   if (!item) return back + pageHeader('Request not found', 'This case is not available in the selected employee’s workspace.') + notice('Choose a request from your own overview.', 'warning');
   return back + pageHeader(caseName(item), 'Your request status and the latest employee-visible update.', item.id)
     + panel('Request status', `<div class="panel-body">${statusBadge(item.status)}<p class="spaced">${escape(item.employee_update || 'There is no employee update recorded yet.')}</p>${item.dates ? `<dl class="definition spaced"><div><dt>Start date</dt><dd>${formatDate(item.dates[0])}</dd></div><div><dt>End date</dt><dd>${formatDate(item.dates[1])}</dd></div></dl>` : ''}</div>`)
+    + (item.kind === 'enrollment' ? `<div class="spaced">${enrollmentGuidance(item)}</div>` : '')
     + `<div class="spaced">${stageNote('Correction and resubmission controls will be added with the core workflow. Internal HR notes are not included in this employee view.')}</div>`;
 }
 

@@ -134,6 +134,11 @@ button:active:not(:disabled) { transform: scale(.98); }
 .notice.warning { background: var(--warning-soft); border-color: #e7d4a6; color: #7a530e; }
 .notice.error { background: var(--danger-soft); border-color: #e9c0bb; color: var(--danger); }
 .notice + .panel { margin-top: 20px; }
+.workflow-feedback:not([hidden]) { margin-bottom: 24px; }
+.generated-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.confirm-check { display: flex; align-items: flex-start; gap: 12px; font-size: 13px; line-height: 1.7; }
+.confirm-check input { flex: 0 0 auto; min-height: 24px; width: 20px; margin-top: 0; }
+.draft + .draft { border-top: 1px solid var(--border); padding-top: 20px; }
 .inline-note { font-size: 11px; color: var(--muted); margin-top: 12px; line-height: 1.7; }
 .footer { display: flex; justify-content: space-between; gap: 15px; color: var(--muted); font-size: 10px; margin-top: 32px; padding-top: 18px; border-top: 1px solid var(--border); }
 .footer a { color: var(--muted); }
