@@ -167,6 +167,7 @@ document.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () 
   $("emp").classList.toggle("hidden", b.dataset.tab !== "emp");
   $("hr").classList.toggle("hidden", b.dataset.tab !== "hr");
   if (b.dataset.tab === "hr") loadQueue();
+  if (b.dataset.tab === "emp") loadMyCases();   // show HR's latest decisions
 }));
 
 // Employee side

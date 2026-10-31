@@ -7,7 +7,7 @@ An AI-powered Benefits and Leave Management system with three agents. Employees 
 ## Team
 
 - Joan Albayrak
-- [Teammate name]
+- Dikshyant Giri ([@Diksh-giri](https://github.com/Diksh-giri))
 
 ## The three agents
 
@@ -50,6 +50,19 @@ The app runs only on your computer. Press **Ctrl + C** in Terminal to stop. See 
 **Demo people (all made up):**
 - New hires: E2001 (incomplete), E2002 (complete), E2003 (part-time, needs an HR exception), E2004 (already sent to vendors, with a vendor mismatch).
 - Current employees: E1001–E1005, for leave requests.
+
+## Public demo website
+
+Anyone can try the demo here, with no install and no login: **https://joanalbayrak.github.io/AI-Powered-Benefits-and-Leave-Management-/**
+
+- It's the same page and the same checks and HR workflow, running in the browser (`site/demo.js` mirrors the Python code).
+- **No API key is used.** The AI agents' messages are examples written from the check results. The live AI version is the laptop version above.
+- Nothing is saved: reloading the page starts the demo over.
+- GitHub Pages serves the `docs/` folder. After changing `benefits_leave/web_page.html` or `site/demo.js`, rebuild it and commit `docs/index.html`:
+  ```bash
+  python3 scripts/build_site.py
+  ```
+  A test checks that the website gives the same results as the Python code, and that `docs/index.html` is up to date.
 
 ## Running the tests
 
