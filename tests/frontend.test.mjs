@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { request, ApiError } from '../benefits_leave/frontend/js/api.js';
+import { request, ApiError, api } from '../benefits_leave/frontend/js/api.js';
+import { WorkflowController } from '../benefits_leave/frontend/js/workflows.js';
 import { routeFromHash } from '../benefits_leave/frontend/js/state.js';
 import { escape, statusBadge } from '../benefits_leave/frontend/js/components.js';
 import { employeeView } from '../benefits_leave/frontend/js/views/employee.js';
@@ -58,4 +59,74 @@ test('an already-aborted request is handled as a canceled or timed-out request',
   const controller = new AbortController();
   controller.abort();
   await assert.rejects(request('/api/people', {}, { signal: controller.signal }), /took too long/);
+});
+
+test('workflow API sends only the selected identity or case and explicit HR input', async t => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  const calls = [];
+  globalThis.fetch = async (path, options) => {
+    calls.push([path, JSON.parse(options.body)]);
+    return { ok: true, json: async () => ({ case: { id: 'C2' } }) };
+  };
+  await api.checkEnrollment('E2002');
+  await api.decide('C2', 'request_info', 'Please clarify');
+  await api.prepareVendor('C2');
+  await api.markSent('C2');
+  await api.checkVendor('C2');
+  assert.deepEqual(calls, [
+    ['/api/employee/enrollment', { employee_id: 'E2002' }],
+    ['/api/hr/decide', { case_id: 'C2', decision: 'request_info', reason: 'Please clarify' }],
+    ['/api/hr/vendor/prepare', { case_id: 'C2' }],
+    ['/api/hr/vendor/sent', { case_id: 'C2' }],
+    ['/api/hr/vendor/check', { case_id: 'C2' }],
+  ]);
+});
+
+test('lost mutation response is not retried or misreported as a failed action', async t => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; throw new TypeError('Connection lost'); };
+  await assert.rejects(api.markSent('C1'), error => error.outcomeUnknown && /may still have completed/.test(error.message));
+  assert.equal(calls, 1);
+});
+
+test('mutation timeout is bounded and requires status reconciliation', async t => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  globalThis.fetch = (_path, options) => new Promise((_resolve, reject) => {
+    options.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+  });
+  await assert.rejects(request('/api/hr/decide', {}, { mutation: true, timeoutMs: 5 }), error => error.outcomeUnknown);
+});
+
+test('action controller prevents overlapping submissions even across navigation', async () => {
+  const controller = new WorkflowController();
+  let finish;
+  const first = controller.execute('employee:E2002', () => new Promise(resolve => { finish = resolve; }));
+  assert.equal(controller.pending, true);
+  let duplicate = false;
+  assert.deepEqual(await controller.execute('hr:C1', () => { duplicate = true; }), { accepted: false });
+  assert.equal(duplicate, false);
+  finish({ case: { id: 'C2' } });
+  assert.equal((await first).result.case.id, 'C2');
+  assert.equal(controller.blocked, false);
+});
+
+test('uncertain action stays blocked until its own workspace is successfully reconciled', async () => {
+  const controller = new WorkflowController();
+  await controller.execute('hr:C1', () => { throw new ApiError('Unknown', true); });
+  controller.reconcile('employee:E2002');
+  assert.equal(controller.blocked, true);
+  assert.equal((await controller.execute('hr:C1', () => ({}))).accepted, false);
+  controller.reconcile('hr:C1');
+  assert.equal(controller.blocked, false);
+});
+
+test('a conclusive workflow rejection leaves the controller ready for corrected input', async () => {
+  const controller = new WorkflowController();
+  const out = await controller.execute('hr:C1', () => { throw new ApiError('A reason is required'); });
+  assert.match(out.error.message, /reason/);
+  assert.equal(controller.blocked, false);
 });

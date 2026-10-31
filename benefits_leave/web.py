@@ -57,6 +57,9 @@ def employee_view(case):
     if case["kind"] == "leave":
         view["leave_type"] = case["check"]["leave_type_label"]
         view["dates"] = [case["request"].get("start_date"), case["request"].get("end_date")]
+    else:
+        view["guidance"] = (case.get("ai") or {}).get("employee_message")
+        view["ai_error"] = case.get("ai_error")
     return view
 
 

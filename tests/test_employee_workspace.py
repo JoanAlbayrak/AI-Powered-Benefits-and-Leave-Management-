@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from benefits_leave.web import employee_overview, handle
 from benefits_leave.workflow import CaseStore, WorkflowError
+from tests.test_benefits_leave import FakeClient, BrokenClient
 
 
 class ReadOnlyWorkspace(unittest.TestCase):
@@ -45,6 +46,30 @@ class ReadOnlyWorkspace(unittest.TestCase):
     def test_unknown_employee_does_not_fall_back_to_another_person(self):
         with self.assertRaises(WorkflowError):
             employee_overview(self.store, 'E9999')
+
+    def test_saved_guidance_is_employee_safe_and_survives_workspace_refresh(self):
+        self.store.client = FakeClient()
+        out = handle(self.store, '/api/employee/enrollment', {'employee_id': 'E2003'})
+        case = employee_overview(self.store, 'E2003')['cases'][0]
+        self.assertEqual(case['guidance'], out['message'])
+        for private in ('ai', 'enrollment', 'hr_flags', 'history', 'handoff'):
+            self.assertNotIn(private, case)
+        self.assertEqual(employee_overview(self.store, 'E2002')['cases'], [])
+
+    def test_unavailable_ai_does_not_hide_or_prevent_hr_review_of_complete_enrollment(self):
+        self.store.client = BrokenClient()
+        out = handle(self.store, '/api/employee/enrollment', {'employee_id': 'E2002'})
+        case = employee_overview(self.store, 'E2002')['cases'][0]
+        self.assertIsNone(case['guidance'])
+        self.assertIn('API key', case['ai_error'])
+        self.assertEqual(case['status'], 'ready_for_hr_review')
+        handle(self.store, '/api/hr/decide', {'case_id': out['case']['id'], 'decision': 'approve'})
+        handle(self.store, '/api/hr/vendor/prepare', {'case_id': out['case']['id']})
+        handle(self.store, '/api/hr/vendor/sent', {'case_id': out['case']['id']})
+        result = handle(self.store, '/api/hr/vendor/check', {'case_id': out['case']['id']})
+        self.assertEqual(result['case']['status'], 'vendor_follow_up')
+        self.assertTrue(result['case']['vendor']['ai_error'])
+        self.assertTrue(result['case']['vendor']['follow_ups'])
 
 
 
