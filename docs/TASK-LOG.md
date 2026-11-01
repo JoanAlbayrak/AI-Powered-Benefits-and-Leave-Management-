@@ -64,15 +64,37 @@ Updated status/setup documents and a reproducible walkthrough. **Accomplishment:
 
 ### H09 — Numbered work plan and task log
 
-**Documented / awaiting review · 31 October 2026 · branch docs/prioritized-plan-and-task-log.**
+**Documented / awaiting review · 31 October 2026 · branch docs/prioritized-plan-and-task-log · [PR #5](https://github.com/JoanAlbayrak/AI-Powered-Benefits-and-Leave-Management-/pull/5).**
 
 Added priorities, dependencies, acceptance criteria, suggested two-person workstreams and program/dependency diagrams. **Accomplishment:** future work and completed milestones can be understood without reconstructing the chat. Application behavior was unchanged; application tests were not rerun solely for this documentation update. Documentation links are checked before publishing.
+
+### T01 — Technical baseline review and regression fix
+
+**Date/owner:** 31 October 2026; Codex implementation/review, human approval pending.
+
+**Status:** technical work complete; committed and published; not merged. [PR #6](https://github.com/JoanAlbayrak/AI-Powered-Benefits-and-Leave-Management-/pull/6) targets `feat/connect-benefits-workflow` (PR #4), rather than main. The task checkbox records technical completion only.
+
+**Purpose:** check the benefits integration before deeper agent work.
+
+**Finding:** an already-decided enrollment still invoked AI before returning its saved case, wasting a request and potentially pairing fresh guidance with an old decision.
+
+**Changed:** check case state before agent execution; return the saved enrollment/guidance/error for decided/provider states. Keep open/information-requested cases recheckable. Updated `workflow.py`, static-demo mirror, generated public page and regression/parity tests.
+
+**Accomplished:** rechecking a decided case preserves its original facts, decision, history and handoff without another model request, including when underlying elections later change.
+
+**Verified:** fresh run of 55 Python tests and 16 frontend tests passed; whitespace checks passed. Regression checks cover all decided/provider states, no added model requests, unchanged case/history, endpoint consistency and continued information-request rechecking. Existing workflow tests cover E2002, E2001 guards, E2004 reconciliation and frozen handoffs. These are fake-model/deterministic checks; no new live-model or screenshot verification claimed.
+
+**Evidence:** fix [3104dc6](https://github.com/JoanAlbayrak/AI-Powered-Benefits-and-Leave-Management-/commit/3104dc6); review record [07c4461](https://github.com/JoanAlbayrak/AI-Powered-Benefits-and-Leave-Management-/commit/07c4461); [review details](https://github.com/JoanAlbayrak/AI-Powered-Benefits-and-Leave-Management-/blob/review/t01-benefits-baseline/docs/T01-REVIEW.md).
+
+**Limits:** PR #4/#6 remain unmerged. The proposed continuation base is `07c4461` above `1f4bc09`; this does not claim shared main or human approval. Live-model setup remains unfinished. No direct main push or external provider sending occurred.
+
+**Next:** T02 runtime configuration/readiness on a new task branch. Actual live verification requires the supplied provider key.
 
 ## Current task register
 
 | ID | Status | Next action / missing input |
 |---|---|---|
-| T01 | Ready for review | Review PR #4 and agree shared base |
+| T01 | Technical review complete; fix awaiting approval | Review PR #6 into PR #4 branch; no merge performed |
 | T02 | Planned; live validation needs key | Confirm provider; prepare setup/readiness |
 | T03 | Planned | Agree evidence/policy/snapshot records |
 | T04 | Planned | Build on T03; fake-model work can proceed before key |

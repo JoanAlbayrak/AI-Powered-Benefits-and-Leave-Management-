@@ -6,13 +6,28 @@ Updated: 31 October 2026. Target: live presentation on Monday, 2 November. This 
 
 The original app, three scoped agents, redesigned scaffold and proposal are on main. The connected benefits journey is implemented in [PR #4](https://github.com/JoanAlbayrak/AI-Powered-Benefits-and-Leave-Management-/pull/4), still open at this checkpoint. Its recorded validation is 53 Python and 16 frontend tests. Live-model success, evidence clarification, specialist consultation and the new leave submission remain unfinished.
 
+## Task checklist
+
+Checks indicate technical task completion, not a merge or human approval. PR status is recorded separately in the log.
+
+- [x] T01 — Technical benefits baseline review and regression fix. [PR #6](https://github.com/JoanAlbayrak/AI-Powered-Benefits-and-Leave-Management-/pull/6); human acceptance and merges remain pending.
+- [ ] T02 — Prepare live AI configuration and verify with the supplied key.
+- [ ] T03 — Scoped evidence, approved policy and snapshot references.
+- [ ] T04 — Enrollment clarification loop.
+- [ ] T05 — Vendor-to-Enrollment consultation.
+- [ ] T06 — Leave draft, confirmation and HR review.
+- [ ] T07 — Case agent activity.
+- [ ] T08 — Cross-workflow and failure checks.
+- [ ] T09 — Two live rehearsals.
+- [ ] T10 — Final reviewed handoff.
+
 ## Numbered tasks in execution order
 
 Must = required for the intended live multi-agent presentation. Should = useful but can be simplified. Estimates are remaining person-hours, not guaranteed elapsed time. Owners are unassigned until agreed.
 
 | Task | Priority | Estimate | Dependency | Current status |
 |---|---|---|---|---|
-| 1 / T01 Review the existing benefits journey | Must | 30 min | PR #4 | Ready for review |
+| 1 / T01 Review the existing benefits journey | Must | 30 min | PR #4 | Technical review complete; fix PR #6 awaits approval |
 | 2 / T02 Prepare live AI configuration | Must | 1 h | Confirm provider; key for live validation | Planned |
 | 3 / T03 Add scoped evidence, policy and snapshot references | Must | 1.5 h | Agree contracts | Planned |
 | 4 / T04 Enrollment clarification loop | Must | 2 h | T03 | Planned |
@@ -32,7 +47,7 @@ About 13.5 person-hours plus 3 hours of integration buffer remain. Prepare runti
 - Follow E2002: enrollment check → HR approval → vendor preparation → simulated sending → confirmation review.
 - Confirm E2001 cannot be approved while incomplete. Inspect E2004's approved employee-only tier versus its family-tier carrier reply.
 - Review frontend action modules, workflow guards and employee-safe projections in PR #4.
-- **Done:** review findings resolved and shared base agreed. Merge only with explicit approval.
+- **Completion:** technical review findings are resolved on `review/t01-benefits-baseline` at `07c4461` (fix `3104dc6`), based on implementation `1f4bc09`. This is the proposed continuation base; team acceptance and merges remain pending. Merge only with explicit approval.
 - **Log:** findings, fixes, branch/PR, agreed base and merge status.
 
 ## Task 2 — Prepare private key and model setup
