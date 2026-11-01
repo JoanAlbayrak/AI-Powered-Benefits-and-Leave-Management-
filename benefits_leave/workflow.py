@@ -51,14 +51,16 @@ class CaseStore:
     # --- Workflow A: enrollment --------------------------------------------------------
     def check_enrollment(self, employee_id):
         """Employee checks their enrollment. Creates or updates their case."""
+        case = next((c for c in self.cases.values()
+                     if c["kind"] == "enrollment" and c["employee_id"] == employee_id), None)
+        if case and case["status"] not in ("incomplete", "ready_for_hr_review", "info_requested"):
+            # A decided case is a historical snapshot, not a new AI request.
+            return {"status": case["enrollment"], "ai": case.get("ai"),
+                    "ai_error": case.get("ai_error")}, case
         result = agents.run_enrollment_agent(employee_id, client=self.client, data=self.data)
         status = result["status"]
         if status["status"] != "ok":
             raise WorkflowError("No enrollment found for this employee")
-        case = next((c for c in self.cases.values()
-                     if c["kind"] == "enrollment" and c["employee_id"] == employee_id), None)
-        if case and case["status"] not in ("incomplete", "ready_for_hr_review", "info_requested"):
-            return result, case   # already decided or with vendors: nothing to reopen
         new_status = "incomplete" if status["missing"] else "ready_for_hr_review"
         if case is None:
             case = self._new_case("enrollment", employee_id, status=new_status, enrollment=status,

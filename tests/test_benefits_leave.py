@@ -182,6 +182,34 @@ class Workflows(unittest.TestCase):
         with self.assertRaises(WorkflowError):
             self.store.hr_decide(case["id"], "approve")
 
+    def test_decided_enrollment_recheck_returns_stored_snapshot_without_ai_or_mutation(self):
+        for state in ("approved", "denied", "vendor_records_ready", "sent_to_vendors",
+                      "vendor_follow_up", "vendor_confirmed"):
+            with self.subTest(state=state):
+                client = FakeClient()
+                store = CaseStore(client=client)
+                _, case = store.check_enrollment("E2002")
+                store.hr_decide(case["id"], "deny" if state == "denied" else "approve", "Reviewed")
+                case["status"] = state
+                before = copy.deepcopy(case)
+                calls = len(client.requests)
+                store.data["new_hires"]["E2002"]["elections"]["medical"]["plan"] = "Later edit"
+                result = handle(store, "/api/employee/enrollment", {"employee_id": "E2002"})
+                self.assertEqual(len(client.requests), calls)
+                self.assertEqual(case, before)
+                self.assertEqual(result["case"]["status"], state)
+                self.assertEqual(result["enrollment"]["done"], before["enrollment"]["done"])
+                self.assertEqual(result["message"], before["ai"]["employee_message"])
+
+    def test_information_request_can_still_be_rechecked(self):
+        client = self.store.client
+        _, case = self.store.check_enrollment("E2002")
+        self.store.hr_decide(case["id"], "request_info", "Please confirm your choices")
+        calls = len(client.requests)
+        self.store.check_enrollment("E2002")
+        self.assertGreater(len(client.requests), calls)
+        self.assertEqual(case["status"], "ready_for_hr_review")
+
     def test_exception_needs_a_reason(self):
         _, case = self.store.check_enrollment("E2003")
         with self.assertRaises(WorkflowError):
