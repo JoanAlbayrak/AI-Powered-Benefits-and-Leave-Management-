@@ -62,11 +62,13 @@ class CaseStore:
         if status["status"] != "ok":
             raise WorkflowError("No enrollment found for this employee")
         new_status = "incomplete" if status["missing"] else "ready_for_hr_review"
+        evidence = checks.evidence_status(employee_id, self.data)
         if case is None:
             case = self._new_case("enrollment", employee_id, status=new_status, enrollment=status,
-                                  ai=result["ai"], ai_error=result["ai_error"])
+                                  ai=result["ai"], ai_error=result["ai_error"], evidence=evidence)
         else:
-            case.update(status=new_status, enrollment=status, ai=result["ai"], ai_error=result["ai_error"])
+            case.update(status=new_status, enrollment=status, ai=result["ai"], ai_error=result["ai_error"],
+                        evidence=evidence)
         self._log(case, f"Enrollment checked: {status['enrollment_state']}")
         return result, case
 

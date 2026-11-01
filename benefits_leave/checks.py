@@ -156,6 +156,11 @@ HANDOFF_FIELDS = ("case_id", "employee_id", "employee_name", "approved_as_of", "
                   "enrollment_summary", "records")
 
 
+def snapshot_ref_for(case_id, version=1):
+    """A stable name for the packet HR approved. A case is approved at most once, so version 1."""
+    return f"{case_id}:approved:{version}"
+
+
 def build_vendor_handoff(case_id, employee_id, data=None, hr_reason="", enrollment_summary=None):
     """The handoff from the enrollment side to the Vendor Agent, frozen at HR approval.
 
@@ -165,6 +170,7 @@ def build_vendor_handoff(case_id, employee_id, data=None, hr_reason="", enrollme
     data = data or load_data()
     return {
         "case_id": case_id,
+        "snapshot_ref": snapshot_ref_for(case_id),
         "employee_id": employee_id,
         "employee_name": data["new_hires"][employee_id]["name"],
         "approved_as_of": data["as_of"],
@@ -214,6 +220,77 @@ def reconcile_vendor_confirmations(handoff, data=None):
                             "result": "discrepancy" if problems else "confirmed",
                             "detail": "; ".join(problems) if problems else "Matches what was sent"})
     return results
+
+
+def approved_snapshot_record(handoff, benefit):
+    """One record from the frozen packet, with its reference. Never reads current elections."""
+    record = next((r for r in handoff.get("records", []) if r.get("benefit") == benefit), None)
+    if record is None:
+        return None
+    ref = f"{handoff.get('snapshot_ref') or snapshot_ref_for(handoff['case_id'])}/records/{benefit}"
+    return {"ref": ref, "approved_as_of": handoff.get("approved_as_of"), "record": dict(record)}
+
+
+# --- Evidence and policy (fictional, scoped) -------------------------------------------
+
+EVIDENCE_STATES = ("absent", "received", "verified")
+
+
+def evidence_for(employee_id, data=None):
+    """Only this employee's document metadata. Other employees' records are never returned."""
+    data = data or load_data()
+    return [dict(item) for item in data.get("evidence", {}).get(employee_id, [])
+            if item.get("employee_id") == employee_id]
+
+
+def evidence_status(employee_id, data=None):
+    """Each proof the current elections require, with absent / received / verified.
+
+    Mapping to the completeness check: only verified proof counts (proof_received is
+    true). Received proof still leaves the item missing until HR verifies it.
+    """
+    data = data or load_data()
+    hire = data["new_hires"].get(employee_id)
+    if hire is None:
+        return []
+    rules = data["rules"]
+    needed = []
+    for benefit in rules["benefit_types"]:
+        election = hire["elections"].get(benefit, {})
+        if election.get("status") != "elected" or election.get("tier") not in rules["tier_dependents"]:
+            continue
+        for relationship in rules["tier_dependents"][election["tier"]]:
+            for person in (d for d in hire["dependents"] if d["relationship"] == relationship):
+                key = (rules["dependent_proof"][relationship], person["name"])
+                if key not in [(n["requirement"], n["dependent"]) for n in needed]:
+                    needed.append({"requirement": key[0], "dependent": person["name"],
+                                   "proof_received": person["proof_received"]})
+    records = evidence_for(employee_id, data)
+    statuses = []
+    for need in needed:
+        match = next((r for r in records if r["requirement"] == need["requirement"]
+                      and r["dependent"] == need["dependent"]), None)
+        state = "verified" if need["proof_received"] else (match or {}).get("state", "absent")
+        if state == "verified" and not need["proof_received"]:
+            state = "received"      # never claim verification the HR record doesn't show
+        statuses.append({
+            "requirement": need["requirement"], "dependent": need["dependent"], "state": state,
+            "evidence_ref": match["id"] if match else None,
+            "received_on": (match or {}).get("received_on"), "verified_on": (match or {}).get("verified_on"),
+            "counts_as_complete": state == "verified",
+        })
+    return statuses
+
+
+def policy_entries(area, data=None):
+    """Approved demo policy for one area (enrollment, vendor or leave), each with a versioned ref."""
+    data = data or load_data()
+    entries = data.get("policy_library", {}).get("entries", [])
+    return [{**e, "ref": f"{e['id']}@v{e['version']}"} for e in entries if area in e["applies_to"]]
+
+
+def policy_refs(area, data=None):
+    return {e["ref"] for e in policy_entries(area, data)}
 
 
 # --- Workflow B: leave request ---------------------------------------------------------
