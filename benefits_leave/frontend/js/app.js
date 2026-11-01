@@ -25,7 +25,7 @@ function paintWorkflow() {
     : workflow.uncertainContext !== null ? notice('An action result has not been confirmed. Refresh its original workspace before taking another action.', 'warning') + '<div class="actions spaced"><button class="btn" id="reconcile-workflow">Refresh latest status</button></div>'
     : message ? notice(message.text, message.tone) : '';
   region.hidden = !region.innerHTML;
-  document.querySelectorAll('[data-workflow-action]').forEach(button => { button.disabled = workflow.blocked; });
+  document.querySelectorAll('[data-workflow-action]').forEach(button => { button.disabled = workflow.blocked || button.dataset.locked === 'true'; });
   document.querySelectorAll('#hr-decision-form, #vendor-sent-form, #enrollment-help-form, #leave-draft-form, #leave-confirm-form').forEach(form => {
     form.setAttribute('aria-busy', String(workflow.pending));
     form.querySelectorAll('select, textarea, input').forEach(input => { input.disabled = workflow.blocked; });

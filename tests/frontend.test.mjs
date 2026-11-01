@@ -163,3 +163,83 @@ test('employee guidance and provider drafts escape generated text and label unav
   assert.match(vendor, /rule-based draft templates/);
   assert.match(vendor, /Draft only/);
 });
+
+// --- T02-T07 additions ---------------------------------------------------------------
+import { aiStatusBadge } from '../benefits_leave/frontend/js/components.js';
+import { enrollmentHelp, documentStatus, activityPanel, consultationPanel } from '../benefits_leave/frontend/js/workflow-ui.js';
+
+test('AI badge distinguishes unavailable, configured-but-untested and live states', () => {
+  assert.match(aiStatusBadge({ ready: false, problems: ['No API key'] }), /AI unavailable/);
+  assert.match(aiStatusBadge({ ready: true, model: 'claude-opus-5-5', last_live_result: { status: 'not_run' } }), /not run yet/);
+  assert.match(aiStatusBadge({ ready: true, model: 'claude-opus-5-5', last_live_result: { status: 'ok' } }), /Live AI · claude-opus-5-5/);
+  assert.match(aiStatusBadge({ ready: true, model: 'm', last_live_result: { status: 'error', detail: 'APITimeoutError' } }), /last call failed/);
+  assert.equal(aiStatusBadge(null), '');
+});
+
+test('document status keeps received separate from verified', () => {
+  const html = documentStatus([{ requirement: 'marriage certificate', dependent: 'Spouse of A', state: 'received', received_on: '2026-10-24', evidence_ref: 'EV-1' }, { requirement: 'birth certificate', dependent: 'Child', state: 'verified', verified_on: '2026-10-12' }]);
+  assert.match(html, /Received · awaiting HR check/);
+  assert.match(html, /stays on your checklist until HR verifies/);
+  assert.match(html, /Verified by HR/);
+});
+
+test('enrollment help escapes generated answers and shows the follow-up question and references', () => {
+  const payload = '<img src=x onerror=alert(1)>';
+  const html = enrollmentHelp({ help_thread: [{ question: payload, answer: payload, follow_up_question: 'When did you send it?', evidence_refs: ['EV-E2001-01'], policy_refs: ['DEMO-ENR-DEPENDENT-PROOF@v1'], facts: ['fact'] }] });
+  assert.doesNotMatch(html, /<img/);
+  assert.match(html, /Question for you:/);
+  assert.match(html, /EV-E2001-01/);
+  assert.match(html, /does not change your case/);
+});
+
+test('enrollment help shows record facts when AI is unavailable', () => {
+  const html = enrollmentHelp({ help_thread: [{ question: 'q', answer: null, ai_error: 'No API key', facts: ['No birth certificate for Child of E is on record.'] }] });
+  assert.match(html, /AI answer unavailable/);
+  assert.match(html, /No birth certificate/);
+});
+
+test('leave draft review allows submission only for a ready draft and only after confirmation', () => {
+  const base = { employee: { kind: 'current employee' }, cases: [], leave_types: [{ id: 'own_health', label: 'Own health', required_documents: ['medical certification'] }], leave_schedules: [{ id: 'continuous', label: 'One continuous block' }] };
+  const notReady = employeeView({ page: 'leave' }, { ...base, leave_drafts: [{ id: 'D1', status: 'draft', request: { leave_type: 'own_health' }, missing_fields: ['Add the start date'], missing_documents: [], ready_to_confirm: false, clarifications: [{ message: 'Need dates', question: 'When does it start?' }] }] });
+  assert.match(notReady, /data-workflow-action="leave-confirm" disabled/);
+  assert.match(notReady, /When does it start\?/);
+  const ready = employeeView({ page: 'leave' }, { ...base, leave_drafts: [{ id: 'D1', status: 'draft', request: { leave_type: 'own_health', start_date: '2026-11-09', end_date: '2026-11-20', schedule: 'continuous' }, missing_fields: [], missing_documents: ['medical certification'], ready_to_confirm: true, clarifications: [] }] });
+  assert.match(ready, /name="confirmed" required/);
+  assert.doesNotMatch(ready, /leave-confirm" disabled/);
+  assert.match(ready, /HR may ask for them/);
+  const newHire = employeeView({ page: 'leave' }, { ...base, employee: { kind: 'new hire' }, leave_drafts: [] });
+  assert.match(newHire, /current-employee profile/);
+});
+
+test('activity shows actors, references, unknowns and HR-only labels, escaped', () => {
+  const html = activityPanel([
+    { step: 1, actor: 'vendor_agent', action: 'Asked the Enrollment Agent about the approved medical intent', finding: '<b>x</b>', evidence_refs: ['C1:approved:1'], unknowns: [], next_step: 'Answer', visibility: 'hr' },
+    { step: 2, actor: 'enrollment_agent', action: 'Answered the Vendor Agent', finding: 'Employee-only approved', evidence_refs: [], unknowns: ['Carrier status'], next_step: '', visibility: 'hr' },
+  ]);
+  assert.match(html, /Vendor Agent · HR only/);
+  assert.match(html, /activity-item agent consult/);
+  assert.match(html, /Unknown: Carrier status/);
+  assert.match(html, /C1:approved:1/);
+  assert.doesNotMatch(html, /<b>x<\/b>/);
+});
+
+test('consultation panel shows the routed question, reply status and snapshot', () => {
+  const html = consultationPanel([{ request_id: 'CONSULT-C1-1', benefit: 'medical', question: 'What tier?', approved_snapshot_ref: 'C1:approved:1', model_calls: 2, reply: { status: 'unavailable', finding: null, evidence_refs: [], unknowns: ['budget used'], proposed_next_action: 'HR reviews' } }]);
+  assert.match(html, /Vendor Agent → Enrollment Agent/);
+  assert.match(html, /Unavailable/);
+  assert.match(html, /C1:approved:1/);
+  assert.equal(consultationPanel([]), '');
+});
+
+test('new mutation endpoints are explicit, labeled mutations', async t => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  const calls = [];
+  globalThis.fetch = async (path, options) => { calls.push([path, JSON.parse(options.body)]); return { ok: true, json: async () => ({}) }; };
+  await api.enrollmentHelp('E2001', 'q');
+  await api.leaveDraft('E1001', { leave_type: 'own_health' });
+  await api.confirmLeave('E1001', 'D1');
+  await api.aiStatus();
+  assert.deepEqual(calls.map(c => c[0]), ['/api/employee/enrollment/help', '/api/employee/leave/draft', '/api/employee/leave/confirm', '/api/ai/status']);
+  assert.equal(calls[2][1].confirmed, true);
+});

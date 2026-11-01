@@ -220,6 +220,7 @@ class CaseStore:
         if case["status"] not in ("sent_to_vendors", "vendor_follow_up"):
             raise WorkflowError("Records must be sent to vendors before confirmations can be checked")
         before = len(case.get("consultations", []))
+        activity_start = len(case.get("activity", []))
         try:
             consult = self._consultation_router(case) if case.get("handoff") else None
             result = agents.run_vendor_agent(case.get("handoff"), client=self.client, data=self.data,
@@ -239,6 +240,10 @@ class CaseStore:
         self._activity(case, "code", "Compared vendor confirmations with the approved packet",
                        ", ".join(f"{n} {k.replace('_', ' ')}" for k, n in counts.items()),
                        evidence_refs=[case["handoff"].get("snapshot_ref")])
+        # The comparison happens before the agent runs: show it before any consultation steps.
+        case["activity"].insert(activity_start, case["activity"].pop())
+        for number, item in enumerate(case["activity"], 1):
+            item["step"] = number
         discrepancy = counts.get("discrepancy", 0) > 0
         unknowns = []
         if result["ai"] and discrepancy and not result["consultations"]:
