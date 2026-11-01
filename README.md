@@ -4,7 +4,7 @@
 
 An AI-powered Benefits and Leave Management system with three agents. Employees log in to do their own benefits enrollment and leave requests, instead of sending paper or emailed forms. The agents check what's missing and explain it. **HR reviews every case and makes every decision.**
 
-> **Status:** the redesigned workspace at `/` connects enrollment checks, HR decisions and vendor review. The leave form remains a preview; its original connected workflow is at `/legacy`. Agent-to-agent consultation and evidence clarification are planned next.
+> **Status (1 November 2026):** the workspace at `/` connects enrollment checks and employee Q&A grounded in document evidence and versioned demo policy, HR decisions, vendor review with a **Vendor → Enrollment specialist consultation**, and a leave draft → clarification → employee confirmation → HR review journey. Every case has a structured agent activity trail. Tests use a scripted model; live-model rehearsal with a real key is the remaining step ([demo script](docs/DEMO-SCRIPT.md)). The original page stays at `/legacy`.
 
 ## Team
 
@@ -16,12 +16,16 @@ An AI-powered Benefits and Leave Management system with three agents. Employees 
 | Agent | What it does | What it never does |
 |---|---|---|
 | Enrollment Agent | Walks a new hire through medical, dental, vision and retirement elections: what's done, what's missing, the deadline, how the 401(k) match works. Writes a summary for HR. | Choose plans for the employee or decide eligibility |
-| Vendor Agent | After HR approves an enrollment, it checks the approved records against each vendor's confirmation, flags mismatches, and drafts follow-up messages. | Send anything to a vendor (HR sends) |
-| Leave Agent | Checks a leave request for missing fields and documents, runs an FMLA pre-check, and writes a summary for HR. | Approve or deny leave |
+| Vendor Agent | After HR approves an enrollment, it checks the approved records against each vendor's confirmation, flags mismatches, consults the Enrollment Agent about the approved intent when a vendor disagrees, and drafts evidence-backed follow-up messages. | Send anything to a vendor (HR sends) |
+| Leave Agent | Helps the employee clarify a leave draft (one question at a time), then checks the confirmed request for missing fields and documents and writes a summary for HR beside the FMLA pre-check. | Approve or deny leave, or promise eligibility |
+
+The Enrollment Agent also answers employee questions ("I already uploaded it") by looking up absent / received / verified document records and the approved demo policy, citing what it used.
+
+**How the agents collaborate:** the Vendor Agent has one consultation tool. Workflow code (not the model) validates the request, derives the employee and the frozen approved snapshot from the case, allows one consultation per vendor check and gives the Enrollment Agent read-only tools with no way to call back. The reply (finding, evidence refs, unknowns, proposed next action) goes into the Vendor Agent's draft. A failed consultation is recorded as an explicit unknown.
 
 **Workflow A (benefits):** the employee checks their enrollment → the Enrollment Agent lists what's missing → HR reviews and approves → HR prepares vendor records → HR marks them sent → the Vendor Agent checks confirmations and drafts follow-ups.
 
-**Workflow B (leave):** the employee submits a request → the Leave Agent checks completeness → HR reviews eligibility → HR approves, denies or requests info → the employee sees the update.
+**Workflow B (leave):** the employee drafts a request → the Leave Agent clarifies it (no case yet) → the employee confirms the exact draft → code checks completeness and runs the FMLA pre-check → HR reviews → HR approves, denies or requests info → the employee sees the update.
 
 ## Getting started
 
@@ -37,6 +41,11 @@ An AI-powered Benefits and Leave Management system with three agents. Employees 
    cp -n .env.example .env
    ```
    `.env` is in `.gitignore`, so it is never committed. Each teammate keeps their own key. Never share keys in git, chat, Slack or screenshots.
+4. Check the setup (prints model and settings, never the key; `--live` makes one small model call):
+   ```bash
+   .venv/bin/python -m benefits_leave.readiness --live
+   ```
+   Optional `.env` settings: `ANTHROPIC_MODEL` (default `claude-opus-5-5`), `ANTHROPIC_EFFORT`, `ANTHROPIC_TIMEOUT_SECONDS`, `ANTHROPIC_MAX_RETRIES`, `BENEFITS_AI_DISABLED`. See `.env.example`.
 
 ## Running the demo page
 
@@ -50,8 +59,8 @@ Open `http://127.0.0.1:8001/legacy` for the original connected enrollment, leave
 The app runs only on your computer. Press **Ctrl + C** in Terminal to stop. See [Frontend scaffold](docs/FRONTEND-SCAFFOLD.md) for structure, boundaries, and next steps.
 
 **Demo people (all made up):**
-- New hires: E2001 (incomplete), E2002 (complete), E2003 (part-time, needs an HR exception), E2004 (already sent to vendors, with a vendor mismatch).
-- Current employees: E1001–E1005, for leave requests.
+- New hires: E2001 (incomplete; marriage certificate *received*, not yet verified), E2002 (complete), E2003 (part-time, needs an HR exception), E2004 (already sent to vendors; carrier says family, HR approved employee-only), E2005 (child's birth certificate *not on record*), E2006 (dependent proof *verified*; retirement choice missing).
+- Current employees: E1001–E1005, for leave requests (E1003 does not meet FMLA basics).
 
 ## Public demo website
 
@@ -85,6 +94,9 @@ node --test tests/frontend.test.mjs
 - If the AI can't run (no key, no internet), the code results still show.
 - A failed HR lookup becomes "cannot determine," never zero or "not eligible."
 - Text an employee writes is treated as unverified information, not instructions.
+- Agent answers may only cite evidence and policy references that exist in scope; code drops anything else.
+- Specialist consultation is code-routed, validated against the case's frozen snapshot, limited to one per vendor check and cannot recurse.
+- Questions and leave clarifications never change a case's status or send an HR notice.
 - Employees only see their own cases, without HR notes.
 
 ## Handoffs and shared state
@@ -98,14 +110,15 @@ node --test tests/frontend.test.mjs
 ```
 benefits_leave/
   agents.py       the three agents (prompts, tools, structured answers)
-  runner.py       the shared tool-use loop (max 6 turns per agent)
+  runner.py       the shared tool-use loop and private .env settings (max 6 turns per agent)
+  readiness.py    setup check: python -m benefits_leave.readiness [--live]
   checks.py       deterministic checks and the vendor handoff
-  workflow.py     the two workflows, the HR queue and the case store
+  workflow.py     the workflows, consultation routing, leave drafts, activity and the case store
   hr_lookup.py    read-only HR lookup for the FMLA pre-check
   web.py          the demo web server (local only)
   web_page.html   original workflow demo, available at /legacy
   frontend/       employee and HR workspace with connected benefits actions
-data/             made-up employees, plans, vendors and leave policy
+data/             made-up employees, plans, vendors, document evidence and versioned demo policy
 tests/            Python and optional Node behavior tests
 docs/             architecture and development handoff notes
 ```

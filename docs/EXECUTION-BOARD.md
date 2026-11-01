@@ -1,6 +1,6 @@
 # Execution board
 
-**Status: P1/P2 implemented on `feat/connect-benefits-workflow`; review pending.** See [Benefits workflow](BENEFITS-WORKFLOW.md) for verification and limits. P0 live-model readiness and P3-P7 remain open. Owners of the remaining work packages are unassigned. Checked items below describe this implementation branch, not a claim that it has been merged.
+**Status (1 November 2026): P1/P2 on `feat/connect-benefits-workflow`; P0 setup, P3–P6 and the P7 automated checks implemented on the T02–T08 task branches (see [implementation record](T02-T08-IMPLEMENTATION.md)).** Live rehearsal with the real key (P7/T09) and human review/merge remain open. Checked items describe implementation branches, not merges.
 
 Target: a presentable local live demo by Sunday evening, ready for Monday, 2 November 2026. Time boxes are estimates, not promises. If time becomes tight, complete and stabilize the first journey before expanding scope.
 
@@ -32,9 +32,9 @@ Two people can work on separate modules after agreeing the contracts. Avoid conc
 ## P0: Scope and runtime
 
 - [ ] Both teammates can inspect the scaffold and explain the same demo story.
-- [ ] Confirm the key provider; keep credentials in a local ignored configuration file.
-- [ ] Verify a supported model and request parameters, with bounded timeout/retries.
-- [ ] Make key/model readiness visible without exposing secrets or making model calls on page browse.
+- [x] Confirm the key provider; keep credentials in a local ignored configuration file.
+- [x] Verify a supported model and request parameters, with bounded timeout/retries. *(Configurable model, standard `output_config.effort`, timeout and retries; live verification is the T09 rehearsal.)*
+- [x] Make key/model readiness visible without exposing secrets or making model calls on page browse.
 - [ ] Agree endpoint payloads and claim work packages before coding.
 
 ## P1: Employee enrollment and HR review
@@ -59,44 +59,44 @@ Checkpoint: the seeded E2004 mismatch is easy to explain in the new interface.
 
 ## P3: Evidence and clarification
 
-- [ ] Introduce scoped fictional evidence references with absent/received/verified states.
-- [ ] Keep employee claims separate from verified records.
-- [ ] Retrieve a small approved policy library with explicit version/source labels.
-- [ ] Ask one targeted question when useful; preserve the clarification context.
-- [ ] Do not change approval state or issue a formal HR notice during clarification.
+- [x] Introduce scoped fictional evidence references with absent/received/verified states.
+- [x] Keep employee claims separate from verified records.
+- [x] Retrieve a small approved policy library with explicit version/source labels.
+- [x] Ask one targeted question when useful; preserve the clarification context.
+- [x] Do not change approval state or issue a formal HR notice during clarification.
 
 Checkpoint: "I already uploaded it" gets different grounded responses for absent, received and verified evidence. No real document uploading is required.
 
 ## P4: Specialist consultation
 
-- [ ] Vendor Agent can request an Enrollment Agent finding through workflow code.
-- [ ] Validate the case, employee and approved-snapshot reference before invoking a specialist.
-- [ ] Limit consultation count and total model work; disallow recursive consultation.
-- [ ] Carry evidence references, unknowns and a proposed next action in the reply.
-- [ ] Include the specialist result in the Vendor Agent's final findings/draft.
-- [ ] A failed consultation returns an explicit unknown and leaves HR in control.
+- [x] Vendor Agent can request an Enrollment Agent finding through workflow code.
+- [x] Validate the case, employee and approved-snapshot reference before invoking a specialist.
+- [x] Limit consultation count and total model work; disallow recursive consultation.
+- [x] Carry evidence references, unknowns and a proposed next action in the reply.
+- [x] Include the specialist result in the Vendor Agent's final findings/draft.
+- [x] A failed consultation returns an explicit unknown and leaves HR in control.
 
 Checkpoint: the consultation actually changes or substantiates the final HR follow-up. Three static labels are not the demonstration.
 
 ## P5: Leave journey
 
-- [ ] Help clarify dates/type/schedule without promising eligibility.
-- [ ] Show a structured draft for employee confirmation before formal submission.
-- [ ] Display missing information and a separate HR pre-check.
-- [ ] Preserve unknown employment facts as "cannot determine."
-- [ ] HR decides, and the employee sees only the permitted update.
-- [ ] Clarification and formal HR requests/notices remain separate events.
+- [x] Help clarify dates/type/schedule without promising eligibility.
+- [x] Show a structured draft for employee confirmation before formal submission.
+- [x] Display missing information and a separate HR pre-check.
+- [x] Preserve unknown employment facts as "cannot determine."
+- [x] HR decides, and the employee sees only the permitted update.
+- [x] Clarification and formal HR requests/notices remain separate events.
 
 Checkpoint: one synthetic leave case goes from incomplete draft to HR review. A failed FMLA pre-check does not automatically deny every leave option.
 
 ## P6-P7: Presentation and quality
 
-- [ ] A compact case activity view shows actor, useful findings, evidence and next step.
-- [ ] Keyboard, narrow-screen, loading, error and empty states remain usable.
-- [ ] Tests cover missing data, approval guards, frozen handoffs, scope and consultation budgets.
-- [ ] Runtime failure preserves deterministic results and clearly labels unavailable AI.
+- [x] A compact case activity view shows actor, useful findings, evidence and next step.
+- [x] Keyboard, narrow-screen, loading, error and empty states remain usable. *(Browser walkthrough: no console errors, no horizontal overflow at 390px.)*
+- [x] Tests cover missing data, approval guards, frozen handoffs, scope and consultation budgets.
+- [x] Runtime failure preserves deterministic results and clearly labels unavailable AI.
 - [ ] Two clean-start rehearsals succeed using the actual key and chosen model.
-- [ ] README and demo instructions reflect actual implemented behavior.
+- [x] README and demo instructions reflect actual implemented behavior.
 - [ ] Feature PRs describe what changed, how it was checked and what remains limited.
 
 ## Live presentation route
