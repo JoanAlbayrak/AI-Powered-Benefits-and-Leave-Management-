@@ -2,6 +2,8 @@
 
 ## What this handoff contains
 
+For ongoing execution, use the [prioritized work plan](WORK-PLAN.md) and [task log](TASK-LOG.md). The [execution board](EXECUTION-BOARD.md) maps earlier packages to the numbered tasks. The log records implementation/review status separately from this original planning handoff.
+
 This is a **documentation and planning scaffold for joint review**. It adds the proposed agent responsibilities, work packages, integration contracts and a shareable report. It does not connect new UI actions or change application behavior. We should review the proposed boundaries together before implementing the next phase.
 
 | Read in this order | Purpose |
