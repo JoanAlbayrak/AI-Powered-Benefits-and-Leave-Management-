@@ -10,6 +10,8 @@ Only HR actions move a case past review. Every step is logged in the case histor
 from benefits_leave import agents, checks
 
 DECISIONS = {"approve", "deny", "request_info"}
+MAX_QUESTION_CHARS = 600
+ACTORS = {"employee", "code", "enrollment_agent", "vendor_agent", "leave_agent", "hr"}
 
 
 class WorkflowError(Exception):
@@ -22,6 +24,7 @@ class CaseStore:
         self.client = client          # None = real Claude; tests pass a pretend client
         self.lookup = lookup          # None = the real leave lookup tool
         self.cases = {}
+        self.help_threads = {}        # employee_id -> enrollment questions and answers (no case state)
         self._next = 1
         self._seed()
 
@@ -30,11 +33,23 @@ class CaseStore:
         case_id = f"C{self._next}"
         self._next += 1
         self.cases[case_id] = {"id": case_id, "kind": kind, "employee_id": employee_id,
-                               "history": [], "employee_update": None, **fields}
+                               "history": [], "activity": [], "employee_update": None, **fields}
         return self.cases[case_id]
 
     def _log(self, case, event):
         case["history"].append(event)
+
+    def _activity(self, case, actor, action, finding="", *, evidence_refs=(), unknowns=(), next_step="",
+                  visibility="hr"):
+        """A structured, readable record of who did what. Never hidden model reasoning.
+
+        visibility "employee" means the employee and HR see it; "hr" means HR only.
+        """
+        assert actor in ACTORS and visibility in ("employee", "hr")
+        case.setdefault("activity", []).append({
+            "step": len(case.get("activity", [])) + 1, "actor": actor, "action": action, "finding": finding,
+            "evidence_refs": list(evidence_refs), "unknowns": list(unknowns), "next_step": next_step,
+            "visibility": visibility})
 
     def get(self, case_id):
         if case_id not in self.cases:
@@ -47,6 +62,8 @@ class CaseStore:
                               enrollment=checks.enrollment_status("E2004", self.data), ai=None)
         case["handoff"] = checks.build_vendor_handoff(case["id"], "E2004", self.data, "Demo approval")
         self._log(case, "Demo: approved by HR and sent to vendors")
+        self._activity(case, "hr", "Approved the enrollment and recorded sending (seeded demo case)",
+                       evidence_refs=[case["handoff"]["snapshot_ref"]], next_step="Check vendor confirmations")
 
     # --- Workflow A: enrollment --------------------------------------------------------
     def check_enrollment(self, employee_id):
@@ -70,7 +87,38 @@ class CaseStore:
             case.update(status=new_status, enrollment=status, ai=result["ai"], ai_error=result["ai_error"],
                         evidence=evidence)
         self._log(case, f"Enrollment checked: {status['enrollment_state']}")
+        missing = len(status["missing"])
+        self._activity(case, "enrollment_agent" if result["ai"] else "code",
+                       "Checked the enrollment and explained it to the employee" if result["ai"]
+                       else "Checked the enrollment (AI explanation unavailable)",
+                       f"{missing} item{'s' if missing != 1 else ''} still missing" if missing else "Nothing missing",
+                       evidence_refs=[e["evidence_ref"] for e in evidence if e["evidence_ref"]],
+                       next_step="Employee completes the missing items" if missing else "HR reviews the case",
+                       visibility="employee")
+        if status["hr_flags"]:
+            self._activity(case, "code", "Flagged items for HR review", "; ".join(status["hr_flags"]),
+                           next_step="HR decides whether an exception applies")
         return result, case
+
+    def enrollment_help(self, employee_id, question):
+        """Answer an employee's question. Never creates a case, changes a status or sends a notice."""
+        question = (question or "").strip()
+        if employee_id not in self.data["new_hires"]:
+            raise WorkflowError("Enrollment help is available for new-hire profiles (E2001-E2006)")
+        if not question:
+            raise WorkflowError("Type a question for the Enrollment Agent")
+        if len(question) > MAX_QUESTION_CHARS:
+            raise WorkflowError(f"Keep the question under {MAX_QUESTION_CHARS} characters")
+        thread = self.help_threads.setdefault(employee_id, [])
+        result = agents.run_enrollment_help(employee_id, question, thread, client=self.client, data=self.data)
+        ai = result["ai"] or {}
+        turn = {"question": question, "answer": ai.get("answer"), "follow_up_question": ai.get("follow_up_question") or "",
+                "evidence_refs": ai.get("evidence_refs", []), "policy_refs": ai.get("policy_refs", []),
+                "unresolved": ai.get("unresolved", []), "facts": result["facts"], "ai_error": result["ai_error"],
+                "dropped_refs": result["dropped_refs"]}
+        thread.append(turn)
+        del thread[:-10]
+        return turn
 
     def prepare_vendor_records(self, case_id):
         case = self.get(case_id)
@@ -79,6 +127,9 @@ class CaseStore:
         case["vendor"] = {"records": case["handoff"]["records"]}   # exactly what HR approved
         case["status"] = "vendor_records_ready"
         self._log(case, "Vendor-ready records prepared (not sent)")
+        self._activity(case, "code", "Prepared vendor records from the frozen approved packet",
+                       f"{len(case['vendor']['records'])} records; nothing sent",
+                       evidence_refs=[case["handoff"].get("snapshot_ref")], next_step="HR records sending")
         return case
 
     def mark_sent(self, case_id):
@@ -87,6 +138,8 @@ class CaseStore:
             raise WorkflowError("Prepare vendor records before marking them sent")
         case["status"] = "sent_to_vendors"
         self._log(case, "HR marked records as sent to vendors")
+        self._activity(case, "hr", "Recorded a simulated sending step", "No external transmission",
+                       next_step="Check vendor confirmations")
         return case
 
     def check_vendor_confirmations(self, case_id):
@@ -147,11 +200,18 @@ class CaseStore:
         case["decision"] = {"decision": decision, "reason": reason}
         case["employee_update"] = labels[decision]
         self._log(case, f"HR decision: {decision}" + (f" ({reason})" if reason else ""))
+        self._activity(case, "hr", f"Recorded the HR decision: {decision.replace('_', ' ')}", labels[decision],
+                       next_step={"approve": "Prepare vendor records" if case["kind"] == "enrollment" else "",
+                                  "deny": "", "request_info": "Employee provides the requested information"}[decision],
+                       visibility="employee")
         if case["kind"] == "enrollment" and decision == "approve":
             # The handoff: freeze what HR approved for the Vendor Agent.
             case["handoff"] = checks.build_vendor_handoff(
                 case["id"], case["employee_id"], self.data, reason, (case.get("ai") or {}).get("hr_summary"))
             self._log(case, f"Handoff to Vendor Agent created ({len(case['handoff']['records'])} records)")
+            self._activity(case, "code", "Froze the approved packet for the Vendor Agent",
+                           f"{len(case['handoff']['records'])} approved records",
+                           evidence_refs=[case["handoff"]["snapshot_ref"]], next_step="Prepare vendor records")
         return case
 
     # --- views -------------------------------------------------------------------------

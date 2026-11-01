@@ -53,7 +53,9 @@ def people(store):
 def employee_view(case):
     """What an employee may see about their own case: no HR notes or internal flags."""
     view = {"id": case["id"], "kind": case["kind"], "status": case["status"],
-            "employee_update": case["employee_update"]}
+            "employee_update": case["employee_update"],
+            "activity": [{k: v for k, v in a.items() if k != "visibility"}
+                         for a in case.get("activity", []) if a["visibility"] == "employee"]}
     if case["kind"] == "leave":
         view["leave_type"] = case["check"]["leave_type_label"]
         view["dates"] = [case["request"].get("start_date"), case["request"].get("end_date")]
@@ -61,6 +63,10 @@ def employee_view(case):
         view["guidance"] = (case.get("ai") or {}).get("employee_message")
         view["ai_error"] = case.get("ai_error")
     return view
+
+
+def _employee_turn(turn):
+    return {k: v for k, v in turn.items() if k != "dropped_refs"}
 
 
 def employee_overview(store, employee_id):
@@ -90,6 +96,7 @@ def employee_overview(store, employee_id):
             selections.append(selection)
     return {"employee": person, "enrollment": enrollment, "selections": selections,
             "evidence": checks.evidence_status(employee_id, store.data) if enrollment else [],
+            "help_thread": [_employee_turn(t) for t in store.help_threads.get(employee_id, [])],
             "cases": [employee_view(c) for c in store.employee_cases(employee_id)],
             "as_of": store.data["as_of"],
             "retirement_match": store.data["retirement_plan"]["match_rule"],
@@ -112,6 +119,10 @@ def handle(store, path, body):
                 "enrollment": {k: s[k] for k in ("name", "deadline", "days_left", "enrollment_state",
                                                  "done", "missing", "notes")},
                 "message": (result["ai"] or {}).get("employee_message"), "ai_error": result["ai_error"]}
+    if path == "/api/employee/enrollment/help":
+        turn = store.enrollment_help(eid, body.get("question", ""))
+        return {"turn": _employee_turn(turn),
+                "thread": [_employee_turn(t) for t in store.help_threads.get(eid, [])]}
     if path == "/api/employee/leave":
         request = {k: body.get(k) for k in ("employee_id", "leave_type", "start_date", "end_date", "reason")}
         request["documents_attached"] = body.get("documents_attached") or []

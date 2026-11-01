@@ -38,6 +38,7 @@ export const api = {
   aiStatus: () => request('/api/ai/status'),
   overview: employeeId => request('/api/employee/overview', { employee_id: employeeId }),
   queue: () => request('/api/hr/queue'),
+  enrollmentHelp: (employeeId, question) => request('/api/employee/enrollment/help', { employee_id: employeeId, question }, { mutation: true }),
   checkEnrollment: employeeId => request('/api/employee/enrollment', { employee_id: employeeId }, { mutation: true }),
   decide: (caseId, decision, reason) => request('/api/hr/decide', { case_id: caseId, decision, reason }, { mutation: true }),
   prepareVendor: caseId => request('/api/hr/vendor/prepare', { case_id: caseId }, { mutation: true }),

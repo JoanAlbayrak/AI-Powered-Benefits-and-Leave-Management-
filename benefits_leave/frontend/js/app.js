@@ -26,7 +26,7 @@ function paintWorkflow() {
     : message ? notice(message.text, message.tone) : '';
   region.hidden = !region.innerHTML;
   document.querySelectorAll('[data-workflow-action]').forEach(button => { button.disabled = workflow.blocked; });
-  document.querySelectorAll('#hr-decision-form, #vendor-sent-form').forEach(form => {
+  document.querySelectorAll('#hr-decision-form, #vendor-sent-form, #enrollment-help-form, #leave-draft-form, #leave-confirm-form').forEach(form => {
     form.setAttribute('aria-busy', String(workflow.pending));
     form.querySelectorAll('select, textarea, input').forEach(input => { input.disabled = workflow.blocked; });
   });
@@ -88,6 +88,19 @@ function bindView() {
   document.querySelector('[data-workflow-action="enrollment"]')?.addEventListener('click', () => {
     const employeeId = state.employeeId;
     performAction(() => api.checkEnrollment(employeeId), 'Enrollment checked. Review the findings below; HR makes the decision.');
+  });
+  const helpForm = document.getElementById('enrollment-help-form');
+  document.querySelectorAll('[data-help-suggestion]').forEach(button => button.addEventListener('click', () => {
+    const field = document.getElementById('help-question');
+    field.value = button.dataset.helpSuggestion;
+    field.focus();
+  }));
+  helpForm?.addEventListener('submit', event => {
+    event.preventDefault();
+    const question = document.getElementById('help-question').value.trim();
+    if (!question) return;
+    const employeeId = state.employeeId;
+    performAction(() => api.enrollmentHelp(employeeId, question), 'The Enrollment Agent answered below. Your case and HR status did not change.');
   });
   const decisionForm = document.getElementById('hr-decision-form');
   const decision = document.getElementById('hr-decision');
