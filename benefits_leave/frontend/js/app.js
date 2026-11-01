@@ -1,11 +1,11 @@
 import { api } from './api.js';
 import { navigation, routeFromHash, readEmployeePreference, saveEmployeePreference } from './state.js';
-import { icon, escape, loadingView, notice, buttonLink, pageHeader } from './components.js';
+import { icon, escape, loadingView, notice, buttonLink, pageHeader, aiStatusBadge } from './components.js';
 import { employeeView } from './views/employee.js';
 import { hrView } from './views/hr.js';
 import { WorkflowController } from './workflows.js';
 
-const state = { people: [], employeeId: readEmployeePreference(), data: null, menuOpen: false };
+const state = { people: [], employeeId: readEmployeePreference(), data: null, menuOpen: false, ai: null };
 let loadVersion = 0;
 const app = document.getElementById('app');
 const main = () => document.getElementById('main');
@@ -64,7 +64,7 @@ function shell(route) {
   const identity = route.role === 'hr' ? 'HR specialist preview' : person?.name || 'Employee preview';
   const initials = route.role === 'hr' ? 'HR' : person?.id.slice(-2) || 'EE';
   const active = route.page === 'cases' ? route.role === 'hr' ? 'queue' : 'overview' : route.page;
-  app.innerHTML = `<header class="topbar"><div class="actions"><button id="menu-toggle" class="mobile-menu" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">${icon('menu')}</button><a class="brand" href="#/${route.role}/${navigation[route.role][0].id}"><span class="brandmark">${icon('shield')}</span><span>Benefits & Leave<small>Your workplace, simplified</small></span></a></div><div class="toptools"><div class="preview-toggle" role="group" aria-label="Demo workspace preview"><button data-preview="employee" aria-label="Employee preview" aria-pressed="${route.role === 'employee'}"><span class="desktop-label">Employee preview</span><span class="mobile-label" aria-hidden="true">Employee</span></button><button data-preview="hr" aria-label="HR preview" aria-pressed="${route.role === 'hr'}"><span class="desktop-label">HR preview</span><span class="mobile-label" aria-hidden="true">HR</span></button></div><div class="profile"><span class="avatar" aria-hidden="true">${escape(initials)}</span><div><b>${escape(identity)}</b><small>${route.role === 'hr' ? 'Demo review workspace' : escape(person?.id || 'Demo profile')}</small></div></div></div></header><aside class="sidebar" id="sidebar"><div class="nav-label">${route.role === 'hr' ? 'HR case center' : 'Personal workspace'}</div><nav class="nav-list" aria-label="${route.role === 'hr' ? 'HR' : 'Employee'} navigation">${navigation[route.role].map(item => `<a class="nav-link" href="#/${route.role}/${item.id}" ${active === item.id ? 'aria-current="page"' : ''}>${icon(item.icon)}${item.label}</a>`).join('')}</nav><div class="sidebar-bottom"><b>Built around clear next steps.</b><p>Computer checks. AI explains.<br>People make the decisions.</p><a href="/legacy" target="_blank" rel="noopener">Open existing workflow demo ${icon('external')}</a></div></aside><div class="main-wrap"><div class="contextbar"><span class="context-note">${icon('info')}Demo workspace · fictional records · no real sign-in</span>${route.role === 'employee' ? `<div class="context-picker"><label for="employee-picker">Demo profile</label><select id="employee-picker">${state.people.map(person => `<option value="${escape(person.id)}" ${person.id === state.employeeId ? 'selected' : ''}>${escape(person.id)} · ${escape(person.name)}</option>`).join('')}</select></div>` : `<span>Case store resets when the server restarts.</span>`}</div><main class="main" id="main" tabindex="-1" aria-busy="true">${loadingView()}</main></div>`;
+  app.innerHTML = `<header class="topbar"><div class="actions"><button id="menu-toggle" class="mobile-menu" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">${icon('menu')}</button><a class="brand" href="#/${route.role}/${navigation[route.role][0].id}"><span class="brandmark">${icon('shield')}</span><span>Benefits & Leave<small>Your workplace, simplified</small></span></a></div><div class="toptools"><div class="preview-toggle" role="group" aria-label="Demo workspace preview"><button data-preview="employee" aria-label="Employee preview" aria-pressed="${route.role === 'employee'}"><span class="desktop-label">Employee preview</span><span class="mobile-label" aria-hidden="true">Employee</span></button><button data-preview="hr" aria-label="HR preview" aria-pressed="${route.role === 'hr'}"><span class="desktop-label">HR preview</span><span class="mobile-label" aria-hidden="true">HR</span></button></div><div class="profile"><span class="avatar" aria-hidden="true">${escape(initials)}</span><div><b>${escape(identity)}</b><small>${route.role === 'hr' ? 'Demo review workspace' : escape(person?.id || 'Demo profile')}</small></div></div></div></header><aside class="sidebar" id="sidebar"><div class="nav-label">${route.role === 'hr' ? 'HR case center' : 'Personal workspace'}</div><nav class="nav-list" aria-label="${route.role === 'hr' ? 'HR' : 'Employee'} navigation">${navigation[route.role].map(item => `<a class="nav-link" href="#/${route.role}/${item.id}" ${active === item.id ? 'aria-current="page"' : ''}>${icon(item.icon)}${item.label}</a>`).join('')}</nav><div class="sidebar-bottom"><b>Built around clear next steps.</b><p>Computer checks. AI explains.<br>People make the decisions.</p><a href="/legacy" target="_blank" rel="noopener">Open existing workflow demo ${icon('external')}</a></div></aside><div class="main-wrap"><div class="contextbar"><span class="context-note">${icon('info')}Demo workspace · fictional records · no real sign-in</span><span id="ai-status" class="ai-status-slot" role="status">${aiStatusBadge(state.ai)}</span>${route.role === 'employee' ? `<div class="context-picker"><label for="employee-picker">Demo profile</label><select id="employee-picker">${state.people.map(person => `<option value="${escape(person.id)}" ${person.id === state.employeeId ? 'selected' : ''}>${escape(person.id)} · ${escape(person.name)}</option>`).join('')}</select></div>` : `<span>Case store resets when the server restarts.</span>`}</div><main class="main" id="main" tabindex="-1" aria-busy="true">${loadingView()}</main></div>`;
   document.querySelectorAll('[data-preview]').forEach(button => button.onclick = () => {
     const role = button.dataset.preview;
     location.hash = `/${role}/${navigation[role][0].id}`;
@@ -146,6 +146,14 @@ function bindView() {
   paintWorkflow();
 }
 
+function refreshAiStatus() {
+  api.aiStatus().then(status => {
+    state.ai = status;
+    const slot = document.getElementById('ai-status');
+    if (slot) slot.innerHTML = aiStatusBadge(status);
+  }).catch(() => { /* The badge is informational; checks keep working without it. */ });
+}
+
 async function load() {
   const version = ++loadVersion;
   const route = routeFromHash(location.hash);
@@ -161,6 +169,7 @@ async function load() {
       if (!state.people.some(person => person.id === state.employeeId)) state.employeeId = state.people[0]?.id || '';
       shell(route);
     }
+    refreshAiStatus();
     const data = route.role === 'employee' ? await api.overview(state.employeeId) : await api.queue();
     if (version !== loadVersion) return;
     state.data = { ...data, people: state.people };

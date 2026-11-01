@@ -21,7 +21,7 @@ class FakeClient:
     def __init__(self):
         self.requests = []
         self.tool_results = []
-        self.beta = NS(messages=NS(create=self._create))
+        self.messages = NS(create=self._create)
 
     def _create(self, **kwargs):
         self.requests.append(kwargs)
@@ -39,7 +39,7 @@ class BrokenClient:
         class AuthenticationError(Exception):
             pass
         self.error = AuthenticationError
-        self.beta = NS(messages=NS(create=self._create))
+        self.messages = NS(create=self._create)
 
     def _create(self, **kwargs):
         raise self.error("bad key")

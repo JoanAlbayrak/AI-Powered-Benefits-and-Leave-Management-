@@ -35,6 +35,7 @@ export async function request(path, body = {}, { signal, mutation = false, timeo
 
 export const api = {
   people: () => request('/api/people'),
+  aiStatus: () => request('/api/ai/status'),
   overview: employeeId => request('/api/employee/overview', { employee_id: employeeId }),
   queue: () => request('/api/hr/queue'),
   checkEnrollment: employeeId => request('/api/employee/enrollment', { employee_id: employeeId }, { mutation: true }),

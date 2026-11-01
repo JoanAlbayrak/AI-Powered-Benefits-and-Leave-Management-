@@ -52,3 +52,14 @@ export const stageNote = text => notice(text || 'Interface foundation: this acti
 export const disabledAction = text => `<button class="btn primary" disabled aria-describedby="connection-note">${escape(text)}</button><span id="connection-note">Workflow connection comes next.</span>`;
 export const caseName = item => item.kind === 'leave' ? item.leave_type || item.check?.leave_type_label || 'Leave request' : 'Benefits enrollment';
 export const loadingView = () => `<div role="status" aria-label="Loading workspace"><div class="loading-label">Loading your workspace…</div><div class="skeleton large"></div><div class="skeleton"></div><section class="panel spaced"><div class="panel-body"><div class="skeleton"></div><div class="skeleton" style="width:85%"></div><div class="skeleton" style="width:50%"></div></div></section></div>`;
+
+export function aiStatusBadge(status) {
+  if (!status) return '';
+  const model = escape(status.model || 'model');
+  const last = status.last_live_result || {};
+  const problems = escape((status.problems || []).join(' '));
+  if (!status.ready) return `<span class="ai-status off" title="${problems}">${icon('bot')}AI unavailable · checks and HR review still work</span>`;
+  if (last.status === 'ok') return `<span class="ai-status live" title="Last live call ${escape(last.at || '')}">${icon('bot')}Live AI · ${model}</span>`;
+  if (last.status === 'error' || last.status === 'no_answer') return `<span class="ai-status warn" title="${escape(last.detail || '')}">${icon('bot')}AI configured · last call failed (${escape(last.detail || 'no answer')})</span>`;
+  return `<span class="ai-status" title="Configured locally; no live call has run in this server session yet.">${icon('bot')}AI configured · ${model} · not run yet</span>`;
+}

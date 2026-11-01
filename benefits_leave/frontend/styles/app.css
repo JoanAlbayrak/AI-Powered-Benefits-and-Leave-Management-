@@ -52,6 +52,9 @@ button:active:not(:disabled) { transform: scale(.98); }
 .contextbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 36px; min-height: 49px; border-bottom: 1px solid var(--border); background: #f0f4f7; font-size: 11px; color: var(--muted); }
 .contextbar .context-note { display: inline-flex; align-items: center; gap: 7px; }
 .contextbar .icon { width: 14px; height: 14px; }
+.ai-status { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--border); background: #fff; color: var(--muted); font-weight: 600; }
+.ai-status.live { color: #1d6b4f; border-color: #b9dccb; background: #eef8f3; }
+.ai-status.warn, .ai-status.off { color: #8a5a00; border-color: #ecd6a6; background: #fff8e8; }
 .context-picker { display: flex; align-items: center; gap: 8px; }
 .context-picker label { font-size: 11px; }
 .context-picker select { background: white; border: 1px solid #aebdc9; padding: 5px 28px 5px 8px; border-radius: 6px; min-height: 30px; font-size: 11px; max-width: 225px; color: var(--ink); }

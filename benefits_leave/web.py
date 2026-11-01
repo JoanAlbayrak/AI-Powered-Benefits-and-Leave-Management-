@@ -15,7 +15,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 from benefits_leave.workflow import CaseStore, WorkflowError
-from benefits_leave import checks
+from benefits_leave import checks, runner
 from benefits_leave.hr_lookup import load_fake_hr_data
 
 PAGE = (Path(__file__).resolve().parent / "web_page.html").read_bytes()
@@ -100,6 +100,8 @@ def handle(store, path, body):
     eid = body.get("employee_id", "")
     if path == "/api/people":
         return {"people": people(store)}
+    if path == "/api/ai/status":
+        return runner.readiness()     # local configuration only: no model call, never the key
     if path == "/api/employee/overview":
         return employee_overview(store, eid)
     if path == "/api/employee/enrollment":
@@ -176,6 +178,9 @@ def main(port=8001):
     server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(store))
     url = f"http://127.0.0.1:{port}"
     print(f"Benefits & Leave agents running at {url}")
+    ai = runner.readiness()
+    print(f"AI: {'configured' if ai['ready'] else 'not ready'} ({ai['model']})"
+          + "".join(f"\n  ! {p}" for p in ai["problems"]))
     print("Press Ctrl + C to stop.")
     threading.Timer(1.0, webbrowser.open, args=[url]).start()
     try:
