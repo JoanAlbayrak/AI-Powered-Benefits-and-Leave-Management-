@@ -8,9 +8,13 @@ Only HR actions move a case past review. Every step is logged in the case histor
 """
 
 from benefits_leave import agents, checks
+from benefits_leave.hr_lookup import load_fake_hr_data
 
 DECISIONS = {"approve", "deny", "request_info"}
 MAX_QUESTION_CHARS = 600
+MAX_REASON_CHARS = 1000
+LEAVE_SCHEDULES = {"continuous": "One continuous block", "intermittent": "Intermittent (separate days or hours)",
+                   "reduced": "Reduced schedule"}
 MAX_CONSULTATIONS_PER_RUN = 1
 CONSULT_QUESTION_TYPES = {"approved_enrollment_intent"}
 ACTORS = {"employee", "code", "enrollment_agent", "vendor_agent", "leave_agent", "hr"}
@@ -27,6 +31,8 @@ class CaseStore:
         self.lookup = lookup          # None = the real leave lookup tool
         self.cases = {}
         self.help_threads = {}        # employee_id -> enrollment questions and answers (no case state)
+        self.drafts = {}              # leave drafts: not cases until the employee confirms
+        self._next_draft = 1
         self._next = 1
         self._seed()
 
@@ -255,10 +261,80 @@ class CaseStore:
     def submit_leave(self, request):
         result = agents.run_leave_agent(request, client=self.client, data=self.data, lookup=self.lookup)
         case = self._new_case("leave", request.get("employee_id"), status="ready_for_hr_review",
-                              request=request, check=result["check"], ai=result["ai"])
+                              request=request, check=result["check"], ai=result["ai"], ai_error=result["ai_error"])
         self._log(case, "Leave request submitted"
                   + ("" if result["check"]["complete"] else " (incomplete: items missing)"))
+        check = result["check"]
+        missing = check["missing_fields"] + [f"Upload: {d}" for d in check["missing_documents"]]
+        self._activity(case, "leave_agent" if result["ai"] else "code",
+                       "Checked the request for completeness" + ("" if result["ai"] else " (AI explanation unavailable)"),
+                       "Missing: " + "; ".join(missing) if missing else "Nothing missing",
+                       next_step="HR reviews the request and decides", visibility="employee")
+        fmla = check["fmla_precheck"]
+        self._activity(case, "code", "Ran the FMLA pre-check (not a decision)", fmla["detail"],
+                       evidence_refs=["DEMO-LEAVE-FMLA-BASICS@v1"],
+                       unknowns=["Employment facts could not be retrieved"] if fmla["status"] == "cannot_determine" else [],
+                       next_step="HR checks FMLA, state leave and company policy before deciding")
         return result, case
+
+    # --- Workflow B (new journey): draft -> clarification -> employee confirmation ------
+    def save_leave_draft(self, employee_id, fields):
+        """Create or update the employee's open draft and ask the Leave Agent to clarify it.
+
+        A draft is not a case: HR does not see it and no formal state changes.
+        """
+        if employee_id not in load_fake_hr_data()["employees"]:
+            raise WorkflowError("Leave requests are available for current-employee profiles (E1001-E1005)")
+        reason = str(fields.get("reason") or "").strip()
+        if len(reason) > MAX_REASON_CHARS:
+            raise WorkflowError(f"Keep the note under {MAX_REASON_CHARS} characters")
+        leave_type = fields.get("leave_type") or ""
+        known_docs = self.data["leave_policy"]["leave_types"].get(leave_type, {}).get("required_documents", [])
+        schedule = fields.get("schedule") if fields.get("schedule") in LEAVE_SCHEDULES else ""
+        request = {"employee_id": employee_id, "leave_type": leave_type,
+                   "start_date": fields.get("start_date") or "", "end_date": fields.get("end_date") or "",
+                   "schedule": schedule, "reason": reason,
+                   "documents_attached": [d for d in (fields.get("documents_attached") or []) if d in known_docs]}
+        draft = next((d for d in self.drafts.values()
+                      if d["employee_id"] == employee_id and d["status"] == "draft"), None)
+        if draft is None:
+            draft = {"id": f"D{self._next_draft}", "employee_id": employee_id, "status": "draft",
+                     "clarifications": [], "case_id": None}
+            self._next_draft += 1
+            self.drafts[draft["id"]] = draft
+        kwargs = {"lookup": self.lookup} if self.lookup else {}
+        check = checks.leave_request_check(request, self.data, **kwargs)
+        missing_fields = check["missing_fields"] + ([] if schedule else ["Add the leave schedule"])
+        result = agents.run_leave_clarifier(request, check, not schedule, client=self.client, data=self.data)
+        ai = result["ai"] or {}
+        draft.update(request=request, leave_type_label=check["leave_type_label"], missing_fields=missing_fields,
+                     missing_documents=check["missing_documents"], ready_to_confirm=not missing_fields)
+        draft["clarifications"].append({"message": ai.get("employee_message"), "question": ai.get("question") or "",
+                                        "policy_refs": ai.get("policy_refs", []), "ai_error": result["ai_error"]})
+        del draft["clarifications"][:-5]
+        return draft
+
+    def confirm_leave_draft(self, employee_id, draft_id, confirmed):
+        """The employee confirms the exact saved draft; only then does a formal HR case exist."""
+        draft = self.drafts.get(draft_id)
+        if draft is None or draft["employee_id"] != employee_id:
+            raise WorkflowError("That draft was not found for this employee")
+        if draft["status"] != "draft":
+            raise WorkflowError(f"This draft was already submitted as case {draft['case_id']}")
+        if confirmed is not True:
+            raise WorkflowError("Confirm that the details are correct before submitting")
+        if not draft["ready_to_confirm"]:
+            raise WorkflowError("Add the leave type, valid dates and schedule before submitting")
+        result, case = self.submit_leave(dict(draft["request"]))
+        case["draft_id"] = draft_id
+        draft.update(status="submitted", case_id=case["id"])
+        case["activity"].insert(0, {"step": 0, "actor": "employee", "action": "Confirmed the draft and submitted it to HR",
+                                    "finding": f"Draft {draft_id}, after {len(draft['clarifications'])} "
+                                               f"clarification{'s' if len(draft['clarifications']) != 1 else ''}",
+                                    "evidence_refs": [], "unknowns": [], "next_step": "", "visibility": "employee"})
+        for number, item in enumerate(case["activity"], 1):
+            item["step"] = number
+        return result, case, draft
 
     # --- HR decisions ------------------------------------------------------------------
     def hr_decide(self, case_id, decision, reason=""):

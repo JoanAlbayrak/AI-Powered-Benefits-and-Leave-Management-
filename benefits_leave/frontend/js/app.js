@@ -84,7 +84,34 @@ function shell(route) {
 }
 
 function bindView() {
-  document.getElementById('leave-preview')?.addEventListener('submit', event => event.preventDefault());
+  const leaveForm = document.getElementById('leave-draft-form');
+  const showDocs = () => {
+    const type = document.getElementById('leave-type')?.value || '';
+    let shown = 0;
+    document.querySelectorAll('[data-doc-type]').forEach(item => {
+      const match = item.dataset.docType === type;
+      item.hidden = !match;
+      if (!match) item.querySelector('input').checked = false;
+      else shown++;
+    });
+    const note = document.getElementById('no-docs-note');
+    if (note) { note.hidden = shown > 0; note.textContent = type ? 'No document is required for this leave type.' : 'Choose a leave type to see required documents.'; }
+  };
+  document.getElementById('leave-type')?.addEventListener('change', showDocs);
+  leaveForm?.addEventListener('submit', event => {
+    event.preventDefault();
+    const form = new FormData(leaveForm);
+    const fields = { leave_type: form.get('leave_type'), start_date: form.get('start_date'), end_date: form.get('end_date'), schedule: form.get('schedule'), reason: form.get('reason'), documents_attached: form.getAll('documents') };
+    const employeeId = state.employeeId;
+    performAction(() => api.leaveDraft(employeeId, fields), 'The Leave Agent checked your draft. Nothing has been sent to HR yet.');
+  });
+  const confirmForm = document.getElementById('leave-confirm-form');
+  confirmForm?.addEventListener('submit', event => {
+    event.preventDefault();
+    const employeeId = state.employeeId;
+    const draftId = confirmForm.dataset.draftId;
+    performAction(() => api.confirmLeave(employeeId, draftId), 'Leave request submitted to HR. HR reviews it and decides.');
+  });
   document.querySelector('[data-workflow-action="enrollment"]')?.addEventListener('click', () => {
     const employeeId = state.employeeId;
     performAction(() => api.checkEnrollment(employeeId), 'Enrollment checked. Review the findings below; HR makes the decision.');
@@ -193,7 +220,7 @@ async function load() {
     }
     main().innerHTML = '<div id="workflow-feedback" class="workflow-feedback" role="status" aria-live="polite" tabindex="-1" hidden></div>'
       + (route.role === 'employee' ? employeeView(route, state.data) : hrView(route, state.data))
-      + `<footer class="footer"><span>Benefits & Leave · Fictional demonstration</span><span>Benefits workflow connected · Leave form preview · <a href="/legacy" target="_blank" rel="noopener">Original demo ${icon('external')}</a></span></footer>`;
+      + `<footer class="footer"><span>Benefits & Leave · Fictional demonstration</span><span>Benefits, leave and agent consultation connected · <a href="/legacy" target="_blank" rel="noopener">Original demo ${icon('external')}</a></span></footer>`;
     const title = main().querySelector('h1')?.textContent || 'Workspace';
     document.title = `${title} · Benefits & Leave`;
   } catch (error) {

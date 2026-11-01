@@ -14,7 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-from benefits_leave.workflow import CaseStore, WorkflowError
+from benefits_leave.workflow import LEAVE_SCHEDULES, CaseStore, WorkflowError
 from benefits_leave import checks, runner
 from benefits_leave.hr_lookup import load_fake_hr_data
 
@@ -57,12 +57,23 @@ def employee_view(case):
             "activity": [{k: v for k, v in a.items() if k != "visibility"}
                          for a in case.get("activity", []) if a["visibility"] == "employee"]}
     if case["kind"] == "leave":
-        view["leave_type"] = case["check"]["leave_type_label"]
+        check = case["check"]
+        view["leave_type"] = check["leave_type_label"]
         view["dates"] = [case["request"].get("start_date"), case["request"].get("end_date")]
+        view["schedule"] = case["request"].get("schedule")
+        view["missing"] = check["missing_fields"] + [f"Upload: {d}" for d in check["missing_documents"]]
+        view["guidance"] = (case.get("ai") or {}).get("employee_message")
+        view["ai_error"] = case.get("ai_error")
     else:
         view["guidance"] = (case.get("ai") or {}).get("employee_message")
         view["ai_error"] = case.get("ai_error")
     return view
+
+
+def draft_view(draft):
+    """The employee's own draft. It never carries the FMLA pre-check."""
+    return {k: draft.get(k) for k in ("id", "status", "request", "leave_type_label", "missing_fields",
+                                      "missing_documents", "ready_to_confirm", "clarifications", "case_id")}
 
 
 def _employee_turn(turn):
@@ -97,6 +108,8 @@ def employee_overview(store, employee_id):
     return {"employee": person, "enrollment": enrollment, "selections": selections,
             "evidence": checks.evidence_status(employee_id, store.data) if enrollment else [],
             "help_thread": [_employee_turn(t) for t in store.help_threads.get(employee_id, [])],
+            "leave_drafts": [draft_view(d) for d in store.drafts.values() if d["employee_id"] == employee_id],
+            "leave_schedules": [{"id": k, "label": v} for k, v in LEAVE_SCHEDULES.items()],
             "cases": [employee_view(c) for c in store.employee_cases(employee_id)],
             "as_of": store.data["as_of"],
             "retirement_match": store.data["retirement_plan"]["match_rule"],
@@ -131,6 +144,14 @@ def handle(store, path, body):
         return {"case": employee_view(case),
                 "missing": check["missing_fields"] + [f"Upload: {d}" for d in check["missing_documents"]],
                 "message": (result["ai"] or {}).get("employee_message"), "ai_error": result["ai_error"]}
+    if path == "/api/employee/leave/draft":
+        fields = {k: body.get(k) for k in ("leave_type", "start_date", "end_date", "schedule", "reason",
+                                           "documents_attached")}
+        draft = store.save_leave_draft(eid, fields)
+        return {"draft": draft_view(draft)}
+    if path == "/api/employee/leave/confirm":
+        _, case, draft = store.confirm_leave_draft(eid, body.get("draft_id"), body.get("confirmed"))
+        return {"case": employee_view(case), "draft": draft_view(draft)}
     if path == "/api/employee/cases":
         return {"cases": [employee_view(c) for c in store.employee_cases(eid)]}
     if path == "/api/hr/queue":

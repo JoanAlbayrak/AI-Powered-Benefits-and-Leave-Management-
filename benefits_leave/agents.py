@@ -279,6 +279,7 @@ def run_leave_agent(request, client=None, data=None, lookup=None):
     kwargs = {"lookup": lookup} if lookup else {}
     check = checks.leave_request_check(request, data, **kwargs)
     tool_view = {**check, "dates": [request.get("start_date"), request.get("end_date")],
+                 "schedule": request.get("schedule"),
                  "employee_reason_unverified": request.get("reason", "")}
     result = _safe_run(
         LEAVE_PROMPT,
@@ -291,6 +292,52 @@ def run_leave_agent(request, client=None, data=None, lookup=None):
         client,
     )
     return {"check": check, **result}
+
+
+# --- Leave Agent: clarifying a draft before submission (T06) ----------------------------
+
+LEAVE_CLARIFY_PROMPT = (
+    "You are the Leave Agent helping an employee prepare a leave request draft before they confirm it and "
+    "send it to HR. Call get_draft_check and get_leave_policy. In employee_message: 2-4 sentences that restate "
+    "the leave type, dates and schedule as recorded, list every missing field and document exactly as the "
+    "check lists them, and remind them they will review and confirm the draft before HR sees it. Never say or "
+    "imply the leave is approved, eligible, protected or likely: HR decides. Do not discuss FMLA eligibility. "
+    "question: ONE short question about the most important missing or unclear item (dates, leave type or "
+    "schedule first), or an empty string if nothing is missing. policy_refs: refs you relied on. "
+    + SHARED_RULES
+)
+
+
+def leave_draft_view(request, check, schedule_missing):
+    """What the Leave Agent may see while clarifying: no FMLA facts, employee text marked unverified."""
+    return {"leave_type": check["leave_type_label"], "dates": [request.get("start_date"), request.get("end_date")],
+            "schedule": request.get("schedule") or None,
+            "missing_fields": check["missing_fields"] + (["Add the leave schedule"] if schedule_missing else []),
+            "missing_documents": check["missing_documents"], "documents_attached": request.get("documents_attached", []),
+            "employee_reason_unverified": request.get("reason", "")}
+
+
+def run_leave_clarifier(request, check, schedule_missing, client=None, data=None):
+    data = data or checks.load_data()
+    view = leave_draft_view(request, check, schedule_missing)
+    # Eligibility rules stay with HR's pre-check: the clarifier gets no FMLA material at all.
+    policy = [e for e in checks.policy_entries("leave", data) if "FMLA" not in e["id"]]
+    result = _safe_run(
+        LEAVE_CLARIFY_PROMPT,
+        "Help this employee clarify their leave request draft.",
+        [read_tool("get_draft_check", "The draft's recorded fields and what is still missing."),
+         read_tool("get_leave_policy", "Leave types, required documents and approved demo leave policy.")],
+        {"get_draft_check": lambda: view,
+         "get_leave_policy": lambda: {"leave_types": data["leave_policy"]["leave_types"], "policy": policy}},
+        submit_tool("submit_leave_clarification", "Submit the message and at most one question.",
+                    {"employee_message": {"type": "string"}, "question": {"type": "string"},
+                     "policy_refs": {"type": "array", "items": {"type": "string"}}}),
+        client,
+    )
+    if result["ai"]:
+        allowed = {e["ref"] for e in policy}
+        result["ai"]["policy_refs"] = [r for r in result["ai"].get("policy_refs", []) if r in allowed]
+    return result
 
 
 # --- Shared ------------------------------------------------------------------------------
