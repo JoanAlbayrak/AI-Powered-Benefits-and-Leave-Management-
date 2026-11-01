@@ -11,6 +11,8 @@ from benefits_leave import agents, checks
 
 DECISIONS = {"approve", "deny", "request_info"}
 MAX_QUESTION_CHARS = 600
+MAX_CONSULTATIONS_PER_RUN = 1
+CONSULT_QUESTION_TYPES = {"approved_enrollment_intent"}
 ACTORS = {"employee", "code", "enrollment_agent", "vendor_agent", "leave_agent", "hr"}
 
 
@@ -142,22 +144,111 @@ class CaseStore:
                        next_step="Check vendor confirmations")
         return case
 
+    def _consultation_router(self, case):
+        """Workflow code routes the Vendor Agent's question to the Enrollment Agent.
+
+        The employee, case and approved snapshot come from the case, never from the model.
+        One consultation per vendor run; the specialist has no tool to call anyone back.
+        """
+        handoff = case["handoff"]
+        used = {"count": 0}
+
+        def consult(question_type="", benefit="", question=""):
+            consultations = case.setdefault("consultations", [])
+            request = {"request_id": f"CONSULT-{case['id']}-{len(consultations) + 1}", "case_id": case["id"],
+                       "employee_id": case["employee_id"], "from_agent": "vendor", "to_agent": "enrollment",
+                       "question_type": question_type, "benefit": benefit, "question": str(question)[:500],
+                       "approved_snapshot_ref": handoff.get("snapshot_ref")}
+
+            def finish(reply, model_calls=0):
+                reply = {"request_id": request["request_id"], **reply}
+                consultations.append({**request, "reply": reply, "model_calls": model_calls})
+                self._log(case, f"Vendor Agent consulted Enrollment Agent about {benefit or 'an unknown benefit'}"
+                                f" ({reply['status']})")
+                self._activity(case, "vendor_agent", f"Asked the Enrollment Agent about the approved {benefit} intent",
+                               request["question"], evidence_refs=[request["approved_snapshot_ref"]],
+                               next_step="Enrollment Agent answers from the frozen approved packet")
+                self._activity(case, "enrollment_agent" if reply["status"] == "answered" else "code",
+                               "Answered the Vendor Agent" if reply["status"] == "answered"
+                               else "Consultation unavailable", reply.get("finding") or "",
+                               evidence_refs=reply.get("evidence_refs", []), unknowns=reply.get("unknowns", []),
+                               next_step=reply.get("proposed_next_action", ""))
+                return reply
+
+            def unavailable(reason):
+                return finish({"status": "unavailable", "finding": None, "evidence_refs": [], "unknowns": [reason],
+                               "proposed_next_action": "HR reviews the approved handoff directly"})
+
+            if used["count"] >= MAX_CONSULTATIONS_PER_RUN:
+                return unavailable("Consultation budget for this run is already used")
+            used["count"] += 1
+            if question_type not in CONSULT_QUESTION_TYPES:
+                return unavailable(f"Question type '{question_type}' is not allowed")
+            snapshot = checks.approved_snapshot_record(handoff, benefit)
+            if snapshot is None or snapshot["record"].get("employee_id") != case["employee_id"]:
+                return unavailable(f"No approved {benefit or 'benefit'} record exists in this case's snapshot")
+            if snapshot["record"].get("plan"):
+                snapshot["plan_costs_by_tier"] = self.data["plans"][benefit].get(snapshot["record"]["plan"], {})
+            hire = self.data["new_hires"][case["employee_id"]]
+            dependents = {"employee_id": case["employee_id"], "as_of": self.data["as_of"],
+                          "dependents_on_record": [{k: d[k] for k in ("name", "relationship", "proof_received")}
+                                                   for d in hire["dependents"]],
+                          "documents": [{"evidence_ref": e["id"], "requirement": e["requirement"],
+                                         "dependent": e["dependent"], "state": e["state"]}
+                                        for e in checks.evidence_for(case["employee_id"], self.data)]}
+            result = agents.run_enrollment_specialist(snapshot, dependents, request["question"],
+                                                      client=self.client, data=self.data)
+            if result["ai"] is None:
+                return finish({"status": "unavailable", "finding": None, "evidence_refs": [],
+                               "unknowns": [f"The Enrollment Agent could not answer: {result['ai_error']}"],
+                               "proposed_next_action": "HR reviews the approved handoff directly"},
+                              result.get("model_calls", 0))
+            reply = {k: result["ai"].get(k) for k in ("status", "finding", "evidence_refs", "unknowns",
+                                                      "proposed_next_action")}
+            return finish(reply, result.get("model_calls", 0))
+
+        return consult
+
     def check_vendor_confirmations(self, case_id):
         case = self.get(case_id)
         if case["status"] not in ("sent_to_vendors", "vendor_follow_up"):
             raise WorkflowError("Records must be sent to vendors before confirmations can be checked")
+        before = len(case.get("consultations", []))
         try:
-            result = agents.run_vendor_agent(case.get("handoff"), client=self.client, data=self.data)
+            consult = self._consultation_router(case) if case.get("handoff") else None
+            result = agents.run_vendor_agent(case.get("handoff"), client=self.client, data=self.data,
+                                             consult=consult)
         except agents.HandoffError as exc:
             self._log(case, f"Vendor Agent stopped: bad handoff ({exc})")
             raise WorkflowError(f"The handoff to the Vendor Agent is not valid: {exc}") from exc
+        result["consultations"] = case.get("consultations", [])[before:]
         case["vendor"] = result
         all_confirmed = all(r["result"] == "confirmed" for r in result["reconciliation"])
         case["status"] = "vendor_confirmed" if all_confirmed else "vendor_follow_up"
         self._log(case, "Vendor confirmations checked: "
                   + ("all confirmed" if all_confirmed else f"{len(result['follow_ups'])} need follow-up"))
+        counts = {}
+        for item in result["reconciliation"]:
+            counts[item["result"]] = counts.get(item["result"], 0) + 1
+        self._activity(case, "code", "Compared vendor confirmations with the approved packet",
+                       ", ".join(f"{n} {k.replace('_', ' ')}" for k, n in counts.items()),
+                       evidence_refs=[case["handoff"].get("snapshot_ref")])
+        discrepancy = counts.get("discrepancy", 0) > 0
+        unknowns = []
+        if result["ai"] and discrepancy and not result["consultations"]:
+            unknowns.append("The Vendor Agent did not consult the Enrollment Agent about the discrepancy")
+        self._activity(case, "vendor_agent" if result["ai"] else "code",
+                       "Summarized vendor results and drafted follow-ups for HR" if result["ai"]
+                       else "Prepared rule-based follow-up templates (AI unavailable)",
+                       (result["ai"] or {}).get("hr_summary") or f"{len(result['follow_ups'])} follow-up drafts",
+                       evidence_refs=sorted({r for f in result["follow_ups"] for r in f.get("evidence_refs", [])}),
+                       unknowns=unknowns + ([result["ai_error"]] if result["ai_error"] else []),
+                       next_step="HR reviews the drafts and sends them through its own channel"
+                       if result["follow_ups"] else "No vendor action needed")
         if all_confirmed:
             case["employee_update"] = "Your benefits enrollment is complete and confirmed by every vendor."
+            self._activity(case, "code", "All vendors confirmed the approved enrollment",
+                           case["employee_update"], visibility="employee")
         return case
 
     # --- Workflow B: leave -------------------------------------------------------------
