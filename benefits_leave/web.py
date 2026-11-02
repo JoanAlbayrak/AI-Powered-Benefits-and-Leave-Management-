@@ -14,9 +14,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-from benefits_leave.workflow import LEAVE_SCHEDULES, CaseStore, WorkflowError
+from benefits_leave.workflow import LEAVE_SCHEDULES, CaseStore, StaleReviewError, WorkflowError
 from benefits_leave import checks, runner
-from benefits_leave.hr_lookup import load_fake_hr_data
+from benefits_leave.agents import employee_safe_status
+from benefits_leave.hr_lookup import load_fake_hr_data, lookup_employee_leave_balance
 
 PAGE = (Path(__file__).resolve().parent / "web_page.html").read_bytes()
 FRONTEND = Path(__file__).resolve().parent / "frontend"
@@ -50,6 +51,14 @@ def people(store):
     return new_hires + current
 
 
+def employee_enrollment_view(status):
+    """Progress and next steps only. HR flags and internal completion classes never leave the HR side.
+
+    One projection for every employee-facing enrollment response, so a new endpoint can't forget it.
+    """
+    return employee_safe_status(status)
+
+
 def employee_view(case):
     """What an employee may see about their own case: no HR notes or internal flags."""
     view = {"id": case["id"], "kind": case["kind"], "status": case["status"],
@@ -64,6 +73,10 @@ def employee_view(case):
         view["missing"] = check["missing_fields"] + [f"Upload: {d}" for d in check["missing_documents"]]
         view["guidance"] = (case.get("ai") or {}).get("employee_message")
         view["ai_error"] = case.get("ai_error")
+        view["request"] = {k: case["request"].get(k) for k in
+                           ("leave_type", "start_date", "end_date", "schedule", "reason", "documents_attached")}
+        view["pending_documents"] = [{"document": i["document"], "state": i["state"]}
+                                     for i in case.get("pending_documents", [])]
     else:
         view["guidance"] = (case.get("ai") or {}).get("employee_message")
         view["ai_error"] = case.get("ai_error")
@@ -80,6 +93,59 @@ def _employee_turn(turn):
     return {k: v for k, v in turn.items() if k != "dropped_refs"}
 
 
+def employee_selections(store, employee_id):
+    """Each benefit's current election, for display or as the starting point for an edit.
+
+    Shared by the read-only overview and every mutating election endpoint, so there's one
+    place that defines what a 'selection' looks like.
+    """
+    hire = store.data["new_hires"].get(employee_id)
+    if hire is None:
+        return []
+    selections = []
+    for benefit in (*store.data["rules"]["benefit_types"], "retirement"):
+        election = hire["elections"].get(benefit, {"status": "not_started"})
+        selection = {"benefit": benefit, "status": election["status"]}
+        if benefit == "retirement":
+            selection["percent"] = election.get("percent")
+        else:
+            selection.update(plan=election.get("plan"), tier=election.get("tier"))
+            selection["cost_per_paycheck"] = store.data["plans"][benefit].get(election.get("plan"), {}).get(election.get("tier"))
+        selections.append(selection)
+    return selections
+
+
+def employee_dependents(store, employee_id):
+    """Each dependent with its document state, regardless of which tier is currently elected.
+
+    `checks.evidence_status` is tier-gated (only reports what the *current* election needs);
+    this is the raw view, so the UI can show upload state for a dependent added before a
+    dependent-covering tier is chosen.
+    """
+    hire = store.data["new_hires"].get(employee_id)
+    if hire is None:
+        return []
+    records = checks.evidence_for(employee_id, store.data)
+    out = []
+    for dependent in hire["dependents"]:
+        requirement = store.data["rules"]["dependent_proof"][dependent["relationship"]]
+        match = next((r for r in records if r["requirement"] == requirement and r["dependent"] == dependent["name"]), None)
+        out.append({**dependent, "requirement": requirement, "document_state": (match or {}).get("state", "absent")})
+    return out
+
+
+def employee_leave_balance(store, employee_id):
+    """Categorized leave balances (pto/sick/personal), or a graceful 'cannot determine'.
+
+    Never fabricates a number -- mirrors the FMLA pre-check's own honesty rule.
+    """
+    lookup = store.lookup or lookup_employee_leave_balance
+    result = lookup(employee_id)
+    if result["status"] != "ok":
+        return {"status": "cannot_determine", "reason": result.get("reason")}
+    return {"status": "ok", "balances": result["facts"]["leave_balances"]["value"], "as_of": result["as_of"]}
+
+
 def employee_overview(store, employee_id):
     """Read-only UI model: existing checks, no agent calls or case creation.
 
@@ -90,27 +156,26 @@ def employee_overview(store, employee_id):
     if person is None:
         raise WorkflowError("Employee not found")
     enrollment = None
-    selections = []
-    if person["kind"] == "new hire":
+    is_new_hire = person["kind"] == "new hire"
+    if is_new_hire:
         result = checks.enrollment_status(employee_id, store.data)
         # Keep eligibility flags and internal completion classifications HR-only.
-        enrollment = {k: result[k] for k in ("name", "deadline", "days_left", "done", "missing", "notes", "as_of")}
-        hire = store.data["new_hires"][employee_id]
-        for benefit in (*store.data["rules"]["benefit_types"], "retirement"):
-            election = hire["elections"].get(benefit, {"status": "not_started"})
-            selection = {"benefit": benefit, "status": election["status"]}
-            if benefit == "retirement":
-                selection["percent"] = election.get("percent")
-            else:
-                selection.update(plan=election.get("plan"), tier=election.get("tier"))
-                selection["cost_per_paycheck"] = store.data["plans"][benefit].get(election.get("plan"), {}).get(election.get("tier"))
-            selections.append(selection)
-    return {"employee": person, "enrollment": enrollment, "selections": selections,
+        enrollment = employee_enrollment_view(result)
+    hire = store.data["new_hires"].get(employee_id)
+    return {"employee": person, "enrollment": enrollment,
+            "selections": employee_selections(store, employee_id),
+            "dependents": employee_dependents(store, employee_id),
+            "enrollment_locked": store.enrollment_locked(employee_id) if is_new_hire else None,
+            "cost_summary": store.enrollment_cost_summary(employee_id) if is_new_hire else None,
+            "plan_options": checks.plan_options(store.data) if is_new_hire else None,
+            "consider_results": store.consider_results.get(employee_id, {}),
             "evidence": checks.evidence_status(employee_id, store.data) if enrollment else [],
             "help_thread": [_employee_turn(t) for t in store.help_threads.get(employee_id, [])],
             "leave_drafts": [draft_view(d) for d in store.drafts.values() if d["employee_id"] == employee_id],
             "leave_schedules": [{"id": k, "label": v} for k, v in LEAVE_SCHEDULES.items()],
             "cases": [employee_view(c) for c in store.employee_cases(employee_id)],
+            "leave_balance": employee_leave_balance(store, employee_id) if not is_new_hire else None,
+            "intake_result": store.intake_results.get(employee_id),
             "as_of": store.data["as_of"],
             "retirement_match": store.data["retirement_plan"]["match_rule"],
             "leave_types": [{"id": key, "label": value["label"], "required_documents": value["required_documents"]}
@@ -121,6 +186,8 @@ def handle(store, path, body):
     eid = body.get("employee_id", "")
     if path == "/api/people":
         return {"people": people(store)}
+    if path == "/api/demo/reset":
+        return {"reset": store.reset()}
     if path == "/api/ai/status":
         return runner.readiness()     # local configuration only: no model call, never the key
     if path == "/api/employee/overview":
@@ -129,13 +196,28 @@ def handle(store, path, body):
         result, case = store.check_enrollment(eid)
         s = result["status"]
         return {"case": employee_view(case),
-                "enrollment": {k: s[k] for k in ("name", "deadline", "days_left", "enrollment_state",
-                                                 "done", "missing", "notes")},
+                "enrollment": employee_enrollment_view(s),
                 "message": (result["ai"] or {}).get("employee_message"), "ai_error": result["ai_error"]}
     if path == "/api/employee/enrollment/help":
         turn = store.enrollment_help(eid, body.get("question", ""))
         return {"turn": _employee_turn(turn),
                 "thread": [_employee_turn(t) for t in store.help_threads.get(eid, [])]}
+    if path == "/api/employee/enrollment/elect":
+        election_fields = {k: body.get(k) for k in ("status", "plan", "tier", "percent")}
+        status = store.set_election(eid, body.get("benefit", ""), election_fields)
+        return {"enrollment": employee_enrollment_view(status),
+                "selections": employee_selections(store, eid), "cost_summary": store.enrollment_cost_summary(eid)}
+    if path == "/api/employee/enrollment/consider":
+        election_fields = {k: body.get(k) for k in ("status", "plan", "tier", "percent")}
+        return store.consider_election(eid, body.get("benefit", ""), election_fields)
+    if path == "/api/employee/enrollment/dependent/add":
+        store.add_dependent(eid, body.get("relationship", ""), body.get("name", ""))
+        return {"dependents": employee_dependents(store, eid), "selections": employee_selections(store, eid)}
+    if path == "/api/employee/enrollment/dependent/upload":
+        store.mark_document_uploaded(eid, body.get("relationship", ""), body.get("name", ""))
+        return {"dependents": employee_dependents(store, eid), "selections": employee_selections(store, eid)}
+    if path == "/api/employee/leave/intake":
+        return store.intake_leave(eid, body.get("description", ""))
     if path == "/api/employee/leave":
         request = {k: body.get(k) for k in ("employee_id", "leave_type", "start_date", "end_date", "reason")}
         request["documents_attached"] = body.get("documents_attached") or []
@@ -152,12 +234,30 @@ def handle(store, path, body):
     if path == "/api/employee/leave/confirm":
         _, case, draft = store.confirm_leave_draft(eid, body.get("draft_id"), body.get("confirmed"))
         return {"case": employee_view(case), "draft": draft_view(draft)}
+    if path == "/api/employee/leave/document":
+        case = store.provide_leave_document(eid, body.get("case_id"), body.get("document", ""))
+        return {"case": employee_view(case)}
+    if path == "/api/employee/leave/resubmit":
+        fields = {k: body.get(k) for k in ("leave_type", "start_date", "end_date", "schedule", "reason",
+                                           "documents_attached")}
+        result, case = store.resubmit_leave(eid, body.get("case_id"), fields)
+        check = result["check"]
+        return {"case": employee_view(case),
+                "missing": check["missing_fields"] + [f"Upload: {d}" for d in check["missing_documents"]],
+                "message": (result["ai"] or {}).get("employee_message"), "ai_error": result["ai_error"]}
     if path == "/api/employee/cases":
         return {"cases": [employee_view(c) for c in store.employee_cases(eid)]}
     if path == "/api/hr/queue":
         return {"cases": store.hr_queue()}
     if path == "/api/hr/decide":
-        return {"case": store.hr_decide(body.get("case_id"), body.get("decision"), body.get("reason", ""))}
+        return {"case": store.hr_decide(body.get("case_id"), body.get("decision"), body.get("reason", ""),
+                                        expected_revision=body.get("review_revision"))}
+    if path == "/api/hr/evidence/verify":
+        return {"case": store.hr_verify_document(body.get("case_id"), body.get("evidence_ref"),
+                                                 expected_revision=body.get("review_revision"))}
+    if path == "/api/hr/leave/resolve":
+        return {"case": store.hr_resolve_pending_documents(body.get("case_id"), body.get("resolution"),
+                                                           body.get("reason", ""))}
     if path == "/api/hr/vendor/prepare":
         return {"case": store.prepare_vendor_records(body.get("case_id"))}
     if path == "/api/hr/vendor/sent":
@@ -196,6 +296,8 @@ def make_handler(store):
                     out = handle(store, self.path, body)
             except WorkflowError as exc:
                 out = {"error": str(exc)}
+                if isinstance(exc, StaleReviewError):
+                    out["stale"] = True      # the page reloads the case instead of asking the user to retry blind
             except (ValueError, json.JSONDecodeError):
                 out = {"error": "Bad request."}
             self._send(200, "application/json", json.dumps(out).encode())

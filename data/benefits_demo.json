@@ -15,16 +15,31 @@
   },
   "plans": {
     "medical": {
-      "Bronze HMO": {"employee": 45.00, "employee_spouse": 110.00, "employee_children": 95.00, "family": 160.00},
-      "Silver PPO": {"employee": 78.00, "employee_spouse": 165.00, "employee_children": 140.00, "family": 230.00},
-      "Gold HMO": {"employee": 120.00, "employee_spouse": 240.00, "employee_children": 210.00, "family": 320.00}
+      "Bronze HMO": {"employee": 45.00, "employee_spouse": 110.00, "employee_children": 95.00, "family": 160.00,
+        "total_premium": {"employee": 220.00, "employee_spouse": 440.00, "employee_children": 400.00, "family": 650.00},
+        "network": "HMO", "deductible": "$6,000 individual / $12,000 family",
+        "description": "Lowest monthly cost, highest cost when you use care. HMO network: pick a primary care provider; referrals needed to see a specialist."},
+      "Silver PPO": {"employee": 78.00, "employee_spouse": 165.00, "employee_children": 140.00, "family": 230.00,
+        "total_premium": {"employee": 310.00, "employee_spouse": 590.00, "employee_children": 530.00, "family": 830.00},
+        "network": "PPO", "deductible": "$2,500 individual / $5,000 family",
+        "description": "Moderate monthly cost and moderate cost when you use care. PPO network: no referrals needed, and out-of-network care is covered at a lower rate."},
+      "Gold HMO": {"employee": 120.00, "employee_spouse": 240.00, "employee_children": 210.00, "family": 320.00,
+        "total_premium": {"employee": 420.00, "employee_spouse": 780.00, "employee_children": 700.00, "family": 1050.00},
+        "network": "HMO", "deductible": "$500 individual / $1,000 family",
+        "description": "Highest monthly cost, lowest cost when you use care. HMO network: pick a primary care provider; referrals needed to see a specialist."}
     },
     "dental": {
-      "Basic Dental": {"employee": 8.00, "employee_spouse": 16.00, "employee_children": 15.00, "family": 24.00},
-      "Plus Dental": {"employee": 14.00, "employee_spouse": 28.00, "employee_children": 26.00, "family": 40.00}
+      "Basic Dental": {"employee": 8.00, "employee_spouse": 16.00, "employee_children": 15.00, "family": 24.00,
+        "total_premium": {"employee": 35.00, "employee_spouse": 65.00, "employee_children": 60.00, "family": 95.00},
+        "description": "Lower monthly cost. Preventive care (cleanings, exams) covered in full; a smaller share of major work like crowns or root canals."},
+      "Plus Dental": {"employee": 14.00, "employee_spouse": 28.00, "employee_children": 26.00, "family": 40.00,
+        "total_premium": {"employee": 55.00, "employee_spouse": 100.00, "employee_children": 95.00, "family": 150.00},
+        "description": "Higher monthly cost. Preventive care covered in full, a larger share of major work, and includes orthodontia coverage."}
     },
     "vision": {
-      "Standard Vision": {"employee": 4.00, "employee_spouse": 8.00, "employee_children": 7.50, "family": 11.00}
+      "Standard Vision": {"employee": 4.00, "employee_spouse": 8.00, "employee_children": 7.50, "family": 11.00,
+        "total_premium": {"employee": 18.00, "employee_spouse": 32.00, "employee_children": 30.00, "family": 44.00},
+        "description": "One eye exam per year, plus an allowance toward glasses or contact lenses."}
     }
   },
   "retirement_plan": {
@@ -32,7 +47,9 @@
     "eligible_after_days": 0,
     "match_rule": "Employer matches 100% of your contribution up to 4% of pay",
     "match_up_to_percent": 4,
-    "contribution_options_percent": [0, 1, 2, 3, 4, 5, 6, 8, 10]
+    "contribution_options_percent": [0, 1, 2, 3, 4, 5, 6, 8, 10],
+    "vesting_schedule": {"type": "graded", "years_to_fully_vested": 4, "percent_per_year": 25,
+      "note": "Your own contributions are always 100% yours. The employer match vests 25% per year of service and is fully yours after 4 years."}
   },
   "vendors": {
     "medical": "Acme Health (medical carrier)",
@@ -42,7 +59,7 @@
   },
   "new_hires": {
     "E2001": {
-      "name": "Test New Hire A",
+      "name": "Priya Nair",
       "start_date": "2026-10-19",
       "weekly_hours": 40,
       "work_state": "NY",
@@ -55,7 +72,7 @@
       "dependents": [{"name": "Spouse of A", "relationship": "spouse", "proof_received": false}]
     },
     "E2002": {
-      "name": "Test New Hire B",
+      "name": "Marcus Alvarez",
       "start_date": "2026-09-30",
       "weekly_hours": 40,
       "work_state": "NY",
@@ -68,7 +85,7 @@
       "dependents": []
     },
     "E2003": {
-      "name": "Test New Hire C",
+      "name": "Sofia Lindqvist",
       "start_date": "2026-10-12",
       "weekly_hours": 20,
       "work_state": "NY",
@@ -81,7 +98,7 @@
       "dependents": []
     },
     "E2004": {
-      "name": "Test New Hire D",
+      "name": "Daniel Okafor",
       "start_date": "2026-09-28",
       "weekly_hours": 40,
       "work_state": "NY",
@@ -94,7 +111,7 @@
       "dependents": []
     },
     "E2005": {
-      "name": "Test New Hire E",
+      "name": "Hana Petrov",
       "start_date": "2026-10-14",
       "weekly_hours": 40,
       "work_state": "NY",
@@ -107,7 +124,7 @@
       "dependents": [{"name": "Child of E", "relationship": "child", "proof_received": false}]
     },
     "E2006": {
-      "name": "Test New Hire F",
+      "name": "Omar Haddad",
       "start_date": "2026-10-07",
       "weekly_hours": 40,
       "work_state": "NY",
@@ -118,8 +135,92 @@
         "retirement": {"status": "not_started"}
       },
       "dependents": [
-        {"name": "Spouse of F", "relationship": "spouse", "proof_received": true},
-        {"name": "Child of F", "relationship": "child", "proof_received": true}
+        {"name": "Layla Haddad", "relationship": "spouse", "proof_received": true},
+        {"name": "Zain Haddad", "relationship": "child", "proof_received": true}
+      ]
+    },
+    "E2007": {
+      "name": "Aisha Rahman",
+      "start_date": "2026-10-14",
+      "weekly_hours": 40,
+      "work_state": "NY",
+      "elections": {
+        "medical": {"status": "elected", "plan": "Silver PPO", "tier": "employee"},
+        "dental": {"status": "elected", "plan": "Basic Dental", "tier": "employee"},
+        "vision": {"status": "elected", "plan": "Standard Vision", "tier": "employee"},
+        "retirement": {"status": "elected", "percent": 6}
+      },
+      "dependents": []
+    },
+    "E2008": {
+      "name": "Tomás Ferreira",
+      "start_date": "2026-10-16",
+      "weekly_hours": 40,
+      "work_state": "NJ",
+      "elections": {
+        "medical": {"status": "elected", "plan": "Gold HMO", "tier": "family"},
+        "dental": {"status": "elected", "plan": "Plus Dental", "tier": "family"},
+        "vision": {"status": "elected", "plan": "Standard Vision", "tier": "family"},
+        "retirement": {"status": "elected", "percent": 3}
+      },
+      "dependents": [
+        {"name": "Camila Ferreira", "relationship": "spouse", "proof_received": true},
+        {"name": "Mateo Ferreira", "relationship": "child", "proof_received": false},
+        {"name": "Lucia Ferreira", "relationship": "child", "proof_received": false}
+      ]
+    },
+    "E2009": {
+      "name": "Chloe Washington",
+      "start_date": "2026-10-20",
+      "weekly_hours": 24,
+      "work_state": "NY",
+      "elections": {
+        "medical": {"status": "elected", "plan": "Bronze HMO", "tier": "employee"},
+        "dental": {"status": "waived"},
+        "vision": {"status": "waived"},
+        "retirement": {"status": "elected", "percent": 0}
+      },
+      "dependents": []
+    },
+    "E2010": {
+      "name": "Jamal Whitfield",
+      "start_date": "2026-09-22",
+      "weekly_hours": 40,
+      "work_state": "NY",
+      "elections": {
+        "medical": {"status": "elected", "plan": "Silver PPO", "tier": "employee"},
+        "dental": {"status": "not_started"},
+        "vision": {"status": "waived"},
+        "retirement": {"status": "not_started"}
+      },
+      "dependents": []
+    },
+    "E2011": {
+      "name": "Elif Demir",
+      "start_date": "2026-10-26",
+      "weekly_hours": 40,
+      "work_state": "NY",
+      "elections": {
+        "medical": {"status": "not_started"},
+        "dental": {"status": "not_started"},
+        "vision": {"status": "not_started"},
+        "retirement": {"status": "not_started"}
+      },
+      "dependents": []
+    },
+    "E2012": {
+      "name": "Rosa Delgado",
+      "start_date": "2026-09-29",
+      "weekly_hours": 40,
+      "work_state": "NY",
+      "elections": {
+        "medical": {"status": "elected", "plan": "Gold HMO", "tier": "employee_spouse"},
+        "dental": {"status": "elected", "plan": "Plus Dental", "tier": "employee_spouse"},
+        "vision": {"status": "elected", "plan": "Standard Vision", "tier": "employee_spouse"},
+        "retirement": {"status": "elected", "percent": 5}
+      },
+      "dependents": [
+        {"name": "Andrés Delgado", "relationship": "spouse", "proof_received": true}
       ]
     }
   },
@@ -129,6 +230,21 @@
       "dental": {"status": "pending"},
       "vision": {"status": "confirmed", "plan": "Standard Vision", "tier": "employee"},
       "retirement": {"status": "confirmed", "percent": 6}
+    },
+    "E2006": {
+      "medical": {"status": "confirmed", "plan": "Silver PPO", "tier": "family"},
+      "dental": {"status": "documents_requested", "requested_doc": "a completed dependent enrollment form for Plus Dental family coverage"}
+    },
+    "E2007": {
+      "medical": {"status": "confirmed", "plan": "Silver PPO", "tier": "employee"},
+      "dental": {"status": "confirmed", "plan": "Basic Dental", "tier": "employee"},
+      "vision": {"status": "confirmed", "plan": "Standard Vision", "tier": "employee"},
+      "retirement": {"status": "confirmed", "percent": 6}
+    },
+    "E2012": {
+      "medical": {"status": "confirmed", "plan": "Gold HMO", "tier": "employee_spouse"},
+      "vision": {"status": "confirmed", "plan": "Standard Vision", "tier": "employee"},
+      "retirement": {"status": "confirmed", "percent": 4}
     }
   },
   "leave_policy": {
@@ -147,10 +263,20 @@
     ],
     "E2005": [],
     "E2006": [
-      {"id": "EV-E2006-01", "employee_id": "E2006", "scope": "enrollment", "requirement": "marriage certificate", "dependent": "Spouse of F",
+      {"id": "EV-E2006-01", "employee_id": "E2006", "scope": "enrollment", "requirement": "marriage certificate", "dependent": "Layla Haddad",
        "state": "verified", "received_on": "2026-10-09", "channel": "employee portal upload", "verified_by": "HR specialist (demo)", "verified_on": "2026-10-12"},
-      {"id": "EV-E2006-02", "employee_id": "E2006", "scope": "enrollment", "requirement": "birth certificate", "dependent": "Child of F",
+      {"id": "EV-E2006-02", "employee_id": "E2006", "scope": "enrollment", "requirement": "birth certificate", "dependent": "Zain Haddad",
        "state": "verified", "received_on": "2026-10-09", "channel": "employee portal upload", "verified_by": "HR specialist (demo)", "verified_on": "2026-10-12"}
+    ],
+    "E2008": [
+      {"id": "EV-E2008-01", "employee_id": "E2008", "scope": "enrollment", "requirement": "marriage certificate", "dependent": "Camila Ferreira",
+       "state": "verified", "received_on": "2026-10-17", "channel": "employee portal upload", "verified_by": "HR specialist (demo)", "verified_on": "2026-10-19"},
+      {"id": "EV-E2008-02", "employee_id": "E2008", "scope": "enrollment", "requirement": "birth certificate", "dependent": "Mateo Ferreira",
+       "state": "received", "received_on": "2026-10-23", "channel": "employee portal upload", "verified_by": null, "verified_on": null}
+    ],
+    "E2012": [
+      {"id": "EV-E2012-01", "employee_id": "E2012", "scope": "enrollment", "requirement": "marriage certificate", "dependent": "Andrés Delgado",
+       "state": "verified", "received_on": "2026-10-01", "channel": "employee portal upload", "verified_by": "HR specialist (demo)", "verified_on": "2026-10-03"}
     ]
   },
   "policy_library": {
@@ -173,7 +299,13 @@
       {"id": "DEMO-LEAVE-FMLA-BASICS", "version": 1, "effective_from": "2026-01-01", "applies_to": ["leave"], "source": "Demo summary of federal FMLA basics (29 CFR 825.110), illustration only",
        "title": "FMLA pre-check basics", "text": "FMLA basics are 12 months of service and 1,250 hours worked in the last 12 months. Not meeting them does not deny every option: HR also checks state leave and company policy. Unknown facts stay unknown."},
       {"id": "DEMO-LEAVE-CLARIFICATION", "version": 1, "effective_from": "2026-01-01", "applies_to": ["leave", "enrollment"], "source": "Synthetic demo employer policy",
-       "title": "Clarification is not a decision", "text": "Questions from an assistant help an employee prepare a request. They are not HR notices, approvals or denials."}
+       "title": "Clarification is not a decision", "text": "Questions from an assistant help an employee prepare a request. They are not HR notices, approvals or denials."},
+      {"id": "DEMO-ENR-DEPENDENT-ELIGIBILITY", "version": 1, "effective_from": "2026-01-01", "applies_to": ["enrollment"], "source": "Synthetic demo employer policy",
+       "title": "Who counts as a dependent", "text": "Eligible dependents are a spouse and children. Parents, domestic partners not registered with HR, and other relatives are not eligible dependents under medical, dental or vision coverage, regardless of tier."},
+      {"id": "DEMO-LEAVE-BALANCES", "version": 1, "effective_from": "2026-01-01", "applies_to": ["leave"], "source": "Synthetic demo employer policy",
+       "title": "Which balance a leave draws on", "text": "Own-health leave draws on the sick balance first, then PTO once sick hours are used. Family care and bonding leave draw on PTO. Personal leave draws on the personal balance, then PTO. HR confirms the balance applied when it decides; this is guidance, not an approval."},
+      {"id": "DEMO-401K-VESTING", "version": 1, "effective_from": "2026-01-01", "applies_to": ["enrollment"], "source": "Synthetic demo employer policy",
+       "title": "401(k) match vesting", "text": "Your own contributions are always 100% yours. The employer match vests 25% per year of service and is fully yours after 4 years of service. Vesting only affects what happens to the match if you leave the company before it is fully vested; it does not affect your contribution choice today."}
     ]
   }
 }

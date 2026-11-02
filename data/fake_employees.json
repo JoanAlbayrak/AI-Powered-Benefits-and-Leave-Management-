@@ -1,11 +1,23 @@
 {
-  "_note": "Made-up test records only. Never put real employee data in this file.",
+  "_note": "Made-up test records only. Never put real employee data in this file. Leave balances are one universal company policy (not state-by-state), with starting hours grounded in NY's paid-sick-leave accrual standard as a realistic reference point.",
   "as_of": "2026-10-15T09:00:00Z",
   "employees": {
-    "E1001": {"name": "Test Person A", "hours_worked_12mo": 1850, "months_of_service": 38, "leave_balance_hours": 120},
-    "E1002": {"name": "Test Person B", "hours_worked_12mo": 1310, "months_of_service": 14, "leave_balance_hours": 0},
-    "E1003": {"name": "Test Person C", "hours_worked_12mo": 900, "months_of_service": 7, "leave_balance_hours": 16},
-    "E1004": {"name": "Test Person D (bad data)", "hours_worked_12mo": 1600, "months_of_service": 24, "leave_balance_hours": "forty"},
-    "E1005": {"name": "Test Person E (missing balance)", "hours_worked_12mo": 1700, "months_of_service": 30}
+    "E1001": {"name": "Elena Rossi", "hours_worked_12mo": 1850, "months_of_service": 38,
+      "leave_balances": {"pto": 96, "sick": 40, "personal": 16}},
+    "E1002": {"name": "Liam Park", "hours_worked_12mo": 1310, "months_of_service": 14,
+      "leave_balances": {"pto": 0, "sick": 0, "personal": 0}},
+    "E1003": {"name": "Nadia Castillo", "hours_worked_12mo": 900, "months_of_service": 7,
+      "leave_balances": {"pto": 24, "sick": 16, "personal": 8}},
+    "E1004": {"name": "Victor Dlamini", "hours_worked_12mo": 1600, "months_of_service": 24,
+      "leave_balances": {"pto": 96, "sick": "forty", "personal": 16}},
+    "E1005": {"name": "Freya Bergman", "hours_worked_12mo": 1700, "months_of_service": 30},
+    "E1006": {"name": "Hannah Okoye", "hours_worked_12mo": 2010, "months_of_service": 62,
+      "leave_balances": {"pto": 120, "sick": 56, "personal": 24}},
+    "E1007": {"name": "Mateo Silva", "hours_worked_12mo": 1180, "months_of_service": 11,
+      "leave_balances": {"pto": 40, "sick": 24, "personal": 8}},
+    "E1008": {"name": "Grace Nakamura", "hours_worked_12mo": 1240, "months_of_service": 30,
+      "leave_balances": {"pto": 72, "sick": 32, "personal": 16}},
+    "E1009": {"name": "Ibrahim Yusuf", "hours_worked_12mo": 1700, "months_of_service": 45,
+      "leave_balances": {"pto": 0, "sick": 80, "personal": 12}}
   }
 }

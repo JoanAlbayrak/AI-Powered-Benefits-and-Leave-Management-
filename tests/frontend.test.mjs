@@ -6,7 +6,7 @@ import { routeFromHash } from '../benefits_leave/frontend/js/state.js';
 import { escape, statusBadge } from '../benefits_leave/frontend/js/components.js';
 import { employeeView } from '../benefits_leave/frontend/js/views/employee.js';
 import { hrView } from '../benefits_leave/frontend/js/views/hr.js';
-import { decisionPanel, enrollmentGuidance, vendorActions, vendorDrafts } from '../benefits_leave/frontend/js/workflow-ui.js';
+import { decisionPanel, enrollmentGuidance, vendorActions, vendorDrafts, hrDocuments, pendingDocumentsPanel, requestedDocumentsPanel, leaveResubmitForm } from '../benefits_leave/frontend/js/workflow-ui.js';
 
 test('deep links preserve case identity and separate employee and HR views', () => {
   assert.deepEqual(routeFromHash('#/employee/cases/C1'), { role: 'employee', page: 'cases', caseId: 'C1' });
@@ -81,6 +81,22 @@ test('workflow API sends only the selected identity or case and explicit HR inpu
     ['/api/hr/vendor/prepare', { case_id: 'C2' }],
     ['/api/hr/vendor/sent', { case_id: 'C2' }],
     ['/api/hr/vendor/check', { case_id: 'C2' }],
+  ]);
+});
+
+test('HR decisions carry the review revision HR opened, so a changed case is rejected by the backend', async t => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  const calls = [];
+  globalThis.fetch = async (path, options) => {
+    calls.push(JSON.parse(options.body));
+    return { ok: true, json: async () => ({ case: { id: 'C2' } }) };
+  };
+  await api.decide('C2', 'approve', '', 3);
+  await api.decide('C2', 'deny', 'No', undefined);
+  assert.deepEqual(calls, [
+    { case_id: 'C2', decision: 'approve', reason: '', review_revision: 3 },
+    { case_id: 'C2', decision: 'deny', reason: 'No' },
   ]);
 });
 
@@ -242,4 +258,84 @@ test('new mutation endpoints are explicit, labeled mutations', async t => {
   await api.aiStatus();
   assert.deepEqual(calls.map(c => c[0]), ['/api/employee/enrollment/help', '/api/employee/leave/draft', '/api/employee/leave/confirm', '/api/ai/status']);
   assert.equal(calls[2][1].confirmed, true);
+});
+
+test('HR can verify only a received document on an open case, and the click carries the revision HR saw', () => {
+  const evidence = [{ requirement: 'marriage certificate', dependent: 'Spouse', state: 'received', evidence_ref: 'EV-1', received_on: '2026-10-24' },
+    { requirement: 'birth certificate', dependent: 'Kid', state: 'verified', evidence_ref: 'EV-2', verified_on: '2026-10-25' },
+    { requirement: 'birth certificate', dependent: 'Other', state: 'absent', evidence_ref: null }];
+  const open = hrDocuments({ id: 'C2', status: 'incomplete', review_revision: 4, evidence });
+  assert.equal((open.match(/data-workflow-action="verify-document"/g) || []).length, 1);
+  assert.match(open, /data-evidence-ref="EV-1"/);
+  assert.match(open, /data-review-revision="4"/);
+  assert.match(open, /Not verified: the item stays open until HR verifies it/);
+  assert.doesNotMatch(hrDocuments({ id: 'C2', status: 'approved', evidence }), /verify-document/);
+});
+
+test('pending leave documents show received distinct from verified, and only offer valid HR steps', () => {
+  const docs = state => [{ document: 'medical certification', state, received_on: '2026-10-26', verified_on: '2026-10-27' }];
+  const waiting = pendingDocumentsPanel({ id: 'C5', kind: 'leave', status: 'approved_pending_documents', pending_documents: docs('requested') });
+  assert.doesNotMatch(waiting, /value="verify_documents"/);        // nothing received yet: cannot verify
+  assert.match(waiting, /value="withdraw_approval"/);
+  const received = pendingDocumentsPanel({ id: 'C5', kind: 'leave', status: 'approved_documents_received', pending_documents: docs('received') });
+  assert.match(received, /value="verify_documents"/);
+  assert.match(received, /HR has not checked it/);
+  const done = pendingDocumentsPanel({ id: 'C5', kind: 'leave', status: 'approved', pending_documents: docs('verified') });
+  assert.doesNotMatch(done, /<form/);
+  assert.match(done, /Verified by HR/);
+});
+
+test('employee can mark only requested documents, and correct a request only after HR asks', () => {
+  const asking = requestedDocumentsPanel({ id: 'C5', kind: 'leave', status: 'approved_pending_documents',
+    pending_documents: [{ document: 'a note', state: 'requested' }, { document: 'a form', state: 'received' }] });
+  assert.equal((asking.match(/data-workflow-action="provide-document"/g) || []).length, 1);
+  assert.match(asking, /data-document="a note"/);
+  assert.doesNotMatch(requestedDocumentsPanel({ id: 'C5', kind: 'leave', status: 'approved_documents_received',
+    pending_documents: [{ document: 'a note', state: 'received' }] }), /provide-document/);
+  const data = { leave_types: [{ id: 'personal', label: 'Personal', required_documents: [] }, { id: 'own_health', label: 'Own health', required_documents: ['medical certification'] }], leave_schedules: [{ id: 'continuous', label: 'Continuous' }] };
+  const item = { id: 'C5', kind: 'leave', status: 'info_requested', employee_update: 'HR needs <b>dates</b>', request: { leave_type: 'own_health', start_date: '2026-11-09', end_date: '2026-11-20', schedule: 'continuous', reason: 'Recovery', documents_attached: ['medical certification'] } };
+  const form = leaveResubmitForm(item, data);
+  assert.match(form, /id="leave-resubmit-form"/);
+  assert.match(form, /value="2026-11-09"/);
+  assert.match(form, /<option value="own_health" selected>/);
+  assert.doesNotMatch(form, /<b>dates<\/b>/);                       // HR's message is escaped
+  assert.equal(leaveResubmitForm({ ...item, status: 'ready_for_hr_review' }, data), '');
+});
+
+test('the employee case page offers the correction path that matches the case kind', () => {
+  const data = { cases: [{ id: 'C2', kind: 'enrollment', status: 'info_requested', employee_update: 'More please' }], leave_types: [], leave_schedules: [] };
+  const html = employeeView({ page: 'cases', caseId: 'C2' }, data);
+  assert.match(html, /Update my enrollment/);
+  assert.doesNotMatch(html, /leave-resubmit-form/);
+});
+
+test('the cost panel shows the vesting rule with its policy source, and nothing when there is none', () => {
+  const base = { enrollment: { done: [], missing: [], notes: [] }, selections: [], dependents: [], evidence: [], help_thread: [], plan_options: { plans: { medical: {}, dental: {}, vision: {} } }, cases: [], leave_drafts: [], consider_results: {}, leave_types: [], employee: { id: 'E2002', kind: 'new hire' } };
+  const summary = { employee_per_paycheck: 120, employer_per_paycheck: 200, retirement_employee_contribution: '4% of pay', retirement_employer_match: '4% of pay' };
+  const withRule = employeeView({ page: 'benefits' }, { ...base, cost_summary: { ...summary, retirement_vesting: { text: 'The match vests over 4 <b>years</b>.', ref: 'DEMO-401K-VESTING@v1' } } });
+  assert.match(withRule, /DEMO-401K-VESTING@v1/);
+  assert.match(withRule, /The match vests over 4/);
+  assert.doesNotMatch(withRule, /<b>years<\/b>/);                         // escaped
+  assert.doesNotMatch(employeeView({ page: 'benefits' }, { ...base, cost_summary: { ...summary, retirement_vesting: null } }), /vest/i);
+});
+
+test('a conflict response is marked stale so the page reloads the case; a plain rule error is not', async t => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ error: 'This case changed after you opened it.', stale: true }) });
+  await assert.rejects(api.decide('C2', 'approve', '', 1), error => error.stale === true && !error.outcomeUnknown);
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ error: 'A reason is required for this decision' }) });
+  await assert.rejects(api.decide('C2', 'deny', '', 1), error => error.stale === false);
+});
+
+test('resetting the demo is an explicit mutation to the reset route and carries no identity', async t => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  const calls = [];
+  globalThis.fetch = async (path, options) => {
+    calls.push([path, JSON.parse(options.body)]);
+    return { ok: true, json: async () => ({ reset: { cases: 1 } }) };
+  };
+  await api.resetDemo();
+  assert.deepEqual(calls, [['/api/demo/reset', {}]]);
 });

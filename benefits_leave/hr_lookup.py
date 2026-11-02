@@ -13,7 +13,8 @@ from pathlib import Path
 
 DATA_FILE = Path(__file__).resolve().parent.parent / "data" / "fake_employees.json"
 EMPLOYEE_ID_PATTERN = re.compile(r"^E\d{4}$")
-NUMBER_FIELDS = ("hours_worked_12mo", "months_of_service", "leave_balance_hours")
+NUMBER_FIELDS = ("hours_worked_12mo", "months_of_service")
+LEAVE_BALANCE_CATEGORIES = ("pto", "sick", "personal")
 
 
 def load_fake_hr_data():
@@ -48,6 +49,14 @@ def lookup_employee_leave_balance(employee_id, fetch=load_fake_hr_data):
         if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
             return _error("bad_data", employee_id)
 
+    balances = record.get("leave_balances")
+    if not isinstance(balances, dict) or set(balances) != set(LEAVE_BALANCE_CATEGORIES):
+        return _error("bad_data", employee_id)
+    for category in LEAVE_BALANCE_CATEGORIES:
+        value = balances[category]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+            return _error("bad_data", employee_id)
+
     source = "lookup_employee_leave_balance"
     return {
         "status": "ok",
@@ -58,7 +67,7 @@ def lookup_employee_leave_balance(employee_id, fetch=load_fake_hr_data):
                                   "source": f"{source}.hours_worked_12mo"},
             "months_of_service": {"value": record["months_of_service"], "units": "months",
                                   "source": f"{source}.months_of_service"},
-            "leave_balance": {"value": record["leave_balance_hours"], "units": "hours",
-                              "source": f"{source}.leave_balance_hours"},
+            "leave_balances": {"value": dict(balances), "units": "hours",
+                               "source": f"{source}.leave_balances"},
         },
     }

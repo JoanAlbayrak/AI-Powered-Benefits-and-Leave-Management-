@@ -138,6 +138,11 @@ const Demo = (() => {
         return { benefit: record.benefit, vendor: record.vendor, result: "pending",
                  detail: "Vendor has not finished processing" };
       }
+      if (conf.status === "documents_requested") {
+        const doc = conf.requested_doc || "additional documentation";
+        return { benefit: record.benefit, vendor: record.vendor, result: "documents_requested",
+                 detail: `Vendor requests: ${doc}`, requested_doc: doc };
+      }
       const problems = [];
       for (const field of ["plan", "tier", "contribution_percent"]) {
         const key = field === "contribution_percent" ? "percent" : field;
@@ -151,7 +156,8 @@ const Demo = (() => {
   }
 
   // --- hr_lookup.py ---------------------------------------------------------------------
-  const NUMBER_FIELDS = ["hours_worked_12mo", "months_of_service", "leave_balance_hours"];
+  const NUMBER_FIELDS = ["hours_worked_12mo", "months_of_service"];
+  const LEAVE_BALANCE_CATEGORIES = ["pto", "sick", "personal"];
 
   function lookupEmployeeLeaveBalance(employeeId, hr) {
     const err = (reason) => ({ status: "error", reason, employee_id: employeeId });
@@ -162,11 +168,20 @@ const Demo = (() => {
       const v = record[f];
       if (typeof v !== "number" || v < 0) return err("bad_data");
     }
+    const balances = record.leave_balances;
+    const hasAllCategories = balances && typeof balances === "object"
+      && LEAVE_BALANCE_CATEGORIES.every(c => c in balances)
+      && Object.keys(balances).length === LEAVE_BALANCE_CATEGORIES.length;
+    if (!hasAllCategories) return err("bad_data");
+    for (const c of LEAVE_BALANCE_CATEGORIES) {
+      const v = balances[c];
+      if (typeof v !== "number" || v < 0) return err("bad_data");
+    }
     const source = "lookup_employee_leave_balance";
     return { status: "ok", employee_id: employeeId, as_of: hr.as_of, facts: {
       hours_worked_12mo: { value: record.hours_worked_12mo, units: "hours", source: `${source}.hours_worked_12mo` },
       months_of_service: { value: record.months_of_service, units: "months", source: `${source}.months_of_service` },
-      leave_balance: { value: record.leave_balance_hours, units: "hours", source: `${source}.leave_balance_hours` },
+      leave_balances: { value: { ...balances }, units: "hours", source: `${source}.leave_balances` },
     } };
   }
 

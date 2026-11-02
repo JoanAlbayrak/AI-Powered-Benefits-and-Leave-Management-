@@ -1,5 +1,7 @@
 # AI-Powered Benefits and Leave Management
 
+**Latest work-in-progress handoff:** [Joan: start here](docs/JOAN-HANDOFF.md). This interactive-enrollment branch has known approval and projection blockers; review the remaining-task checklist before merging.
+
 **Team handoff:** start with [Team start here](docs/TEAM-START-HERE.md) for implementation boundaries and local setup. The [execution board](docs/EXECUTION-BOARD.md) and [workflow contracts](docs/WORKFLOW-CONTRACTS.md) distinguish connected benefits actions from remaining proposals. See the [benefits integration checkpoint](docs/BENEFITS-WORKFLOW.md) for what to try now, or the [project proposal](docs/BENEFITS-LEAVE-PROPOSAL.md) and [visual PDF](docs/reports/Benefits-and-Leave-Case-Team-Report.pdf) for the domain and agent design.
 
 An AI-powered Benefits and Leave Management system with three agents. Employees log in to do their own benefits enrollment and leave requests, instead of sending paper or emailed forms. The agents check what's missing and explain it. **HR reviews every case and makes every decision.**
@@ -45,7 +47,7 @@ The Enrollment Agent also answers employee questions ("I already uploaded it") b
    ```bash
    .venv/bin/python -m benefits_leave.readiness --live
    ```
-   Optional `.env` settings: `ANTHROPIC_MODEL` (default `claude-opus-5-5`), `ANTHROPIC_EFFORT`, `ANTHROPIC_TIMEOUT_SECONDS`, `ANTHROPIC_MAX_RETRIES`, `BENEFITS_AI_DISABLED`. See `.env.example`.
+   Optional `.env` settings: `ANTHROPIC_MODEL` (default `claude-opus-5-5`), `ANTHROPIC_EFFORT`, `ANTHROPIC_TIMEOUT_SECONDS`, `ANTHROPIC_MAX_RETRIES`, `ANTHROPIC_ACTION_BUDGET_SECONDS` (one shared time budget per action, default 90 s), `BENEFITS_AI_DISABLED`. See `.env.example`.
 
 ## Running the demo page
 
@@ -58,9 +60,11 @@ Open `http://127.0.0.1:8001/legacy` for the original connected enrollment, leave
 
 The app runs only on your computer. Press **Ctrl + C** in Terminal to stop. See [Frontend scaffold](docs/FRONTEND-SCAFFOLD.md) for structure, boundaries, and next steps.
 
-**Demo people (all made up):**
-- New hires: E2001 (incomplete; marriage certificate *received*, not yet verified), E2002 (complete), E2003 (part-time, needs an HR exception), E2004 (already sent to vendors; carrier says family, HR approved employee-only), E2005 (child's birth certificate *not on record*), E2006 (dependent proof *verified*; retirement choice missing).
-- Current employees: E1001–E1005, for leave requests (E1003 does not meet FMLA basics).
+**Demo people (all made up)** are in `data/benefits_demo.json` (new hires) and `data/fake_employees.json` (current employees):
+- New hires E2001–E2012 cover an incomplete enrollment, a complete one, part-time eligibility flags, a missed enrollment window, a family with mixed document states, a start-from-nothing hire, an already-sent case with a carrier mismatch (C1), and carriers that disagree or stay silent.
+- Current employees E1001–E1009 cover leave that meets, narrowly misses, or clearly misses the FMLA basics, real-zero balances, and unknown or bad data ("cannot determine").
+
+**Test it yourself:** follow the [functional test guide](docs/FUNCTIONAL-TEST-GUIDE.md): a table of every person and 18 step-by-step tests with expected results. Press **Reset demo data** (top of every page) to start clean. You can edit the two data files and press Reset to see changes without restarting.
 
 ## Public demo website
 

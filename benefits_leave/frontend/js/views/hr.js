@@ -1,9 +1,9 @@
 import { icon, escape, label, coverageTier, badge, statusBadge, buttonLink, emptyState, notice, panel, pageHeader, agentInfo, caseName } from '../components.js';
-import { decisionPanel, vendorActions, vendorDrafts, activityPanel, consultationPanel, documentStatus } from '../workflow-ui.js';
+import { decisionPanel, vendorActions, vendorDrafts, activityPanel, consultationPanel, hrDocuments, pendingDocumentsPanel } from '../workflow-ui.js';
 import { formatDate } from '../components.js';
 const nameFor = (data, id) => data.people.find(person => person.id === id)?.name || id;
 const summaryFor = item => item.vendor?.ai?.hr_summary || item.ai?.hr_summary;
-const nextAction = item => ({ incomplete: 'Review missing information', ready_for_hr_review: 'Review case', approved: 'Prepare vendor records', vendor_records_ready: 'Confirm HR transmission', sent_to_vendors: 'Check vendor confirmations', vendor_follow_up: 'Review vendor follow-ups', vendor_confirmed: 'No open vendor action', info_requested: 'Await employee information', denied: 'Review recorded decision' }[item.status] || 'Review case');
+const nextAction = item => ({ incomplete: 'Review missing information', ready_for_hr_review: 'Review case', approved: 'Prepare vendor records', vendor_records_ready: 'Confirm HR transmission', sent_to_vendors: 'Check vendor confirmations', vendor_follow_up: 'Review vendor follow-ups', vendor_confirmed: 'No open vendor action', info_requested: 'Await employee information', denied: 'Review recorded decision', approved_pending_documents: 'Await the pending document', approved_documents_received: 'Verify the received documents' }[item.status] || 'Review case');
 
 function caseRows(data, cases) {
   return cases.map(item => `<tr data-case-row data-search="${escape(`${item.id} ${nameFor(data, item.employee_id)} ${item.employee_id} ${caseName(item)}`.toLowerCase())}" data-status="${escape(item.status)}"><td data-label="Case"><div><a href="#/hr/cases/${encodeURIComponent(item.id)}"><b>${escape(item.id)}</b></a><small>${escape(caseName(item))}</small></div></td><td data-label="Employee"><div><b>${escape(nameFor(data, item.employee_id))}</b><small>${escape(item.employee_id)}</small></div></td><td data-label="Status">${statusBadge(item.status)}</td><td data-label="Next action"><span>${escape(nextAction(item))}</span></td><td data-label="Open">${buttonLink('View case', `#/hr/cases/${encodeURIComponent(item.id)}`, { symbol: 'arrow' })}</td></tr>`).join('');
@@ -54,7 +54,8 @@ function caseDetail(data, caseId) {
   if (item.vendor?.reconciliation?.length) html += `<div class="spaced">${panel('Stored vendor results', item.vendor.reconciliation.map(result => `<div class="list-row"><div><b>${escape(result.vendor)}</b><p>${escape(result.detail || 'Recorded comparison result')}</p></div>${badge(label(result.result), result.result === 'confirmed' ? 'success' : 'warning')}</div>`).join(''))}</div>`;
   if (item.vendor?.consultations?.length) html += `<div class="spaced">${consultationPanel(item.vendor.consultations)}</div>`;
   html += vendorDrafts(item);
-  if (item.evidence?.length) html += `<div class="spaced">${documentStatus(item.evidence)}</div>`;
+  if (item.evidence?.length) html += `<div class="spaced">${hrDocuments(item)}</div>`;
+  if (item.pending_documents?.length) html += `<div class="spaced">${pendingDocumentsPanel(item)}</div>`;
   if (item.activity?.length) html += `<div class="spaced">${activityPanel(item.activity)}</div>`;
   if (item.history?.length) html += `<details class="spaced"><summary>Raw workflow history (${item.history.length} events)</summary><div class="timeline">${item.history.map((event, index) => `<div class="timeline-item"><small>Event ${index + 1}</small><p>${escape(event)}</p></div>`).join('')}</div></details>`;
   return html;

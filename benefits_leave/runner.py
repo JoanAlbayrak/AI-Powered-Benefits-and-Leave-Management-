@@ -11,6 +11,8 @@ Runtime settings come from the private .env file (never from the browser):
     ANTHROPIC_EFFORT            low | medium | high (default medium); "none" omits it
     ANTHROPIC_TIMEOUT_SECONDS   per request, default 60
     ANTHROPIC_MAX_RETRIES       SDK retries for transient errors, default 2
+    ANTHROPIC_ACTION_BUDGET_SECONDS  total model time for ONE user action (the agent plus any specialist
+                                it consults), default 90. Keep it under the page's 120 s action timeout.
     BENEFITS_AI_DISABLED        set to 1 to force the deterministic fallback
 """
 
@@ -23,6 +25,8 @@ DEFAULT_MODEL = "claude-opus-5-5"
 MODEL = DEFAULT_MODEL           # kept for older imports; use settings()["model"]
 MAX_TURNS = 6
 MAX_TOKENS = 8000
+MIN_ATTEMPT_SECONDS = 1.0
+MIN_CONSULT_SECONDS = 5.0        # not worth starting a specialist run with less time than this
 PLACEHOLDER_KEYS = {"", "your-anthropic-api-key-here"}
 EFFORTS = {"low", "medium", "high"}
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
@@ -74,11 +78,14 @@ def settings():
     problems += [problem] if problem else []
     retries, problem = _number("ANTHROPIC_MAX_RETRIES", 2, int, 0, 5)
     problems += [problem] if problem else []
+    budget, problem = _number("ANTHROPIC_ACTION_BUDGET_SECONDS", 90.0, float, 10, 110)
+    problems += [problem] if problem else []
     return {
         "model": os.environ.get("ANTHROPIC_MODEL", "").strip() or DEFAULT_MODEL,
         "effort": effort,
         "timeout_seconds": timeout,
         "max_retries": retries,
+        "action_budget_seconds": budget,
         "disabled": os.environ.get("BENEFITS_AI_DISABLED", "").strip().lower() in ("1", "true", "yes"),
         "problems": problems,
     }
@@ -115,6 +122,7 @@ def readiness():
         "effort": config["effort"],
         "timeout_seconds": config["timeout_seconds"],
         "max_retries": config["max_retries"],
+        "action_budget_seconds": config["action_budget_seconds"],
         "key_configured": _key_configured(),
         "sdk_installed": _sdk_installed(),
         "problems": problems,
@@ -137,6 +145,32 @@ def make_client():
 def record_live_result(status, model, detail=None):
     LAST_LIVE_RESULT.update(status=status, model=model, detail=detail,
                             at=time.strftime("%Y-%m-%d %H:%M:%S"))
+
+
+class TimeBudget:
+    """One shared elapsed-time allowance for a whole user action.
+
+    A per-request timeout and a turn limit alone can still add up to far more than the page waits for.
+    Every model call in an action (the agent, and a specialist it consults) draws on the same budget.
+    """
+
+    def __init__(self, seconds, clock=time.monotonic):
+        self.total = float(seconds)
+        self._clock = clock
+        self._start = clock()
+
+    def elapsed(self):
+        return self._clock() - self._start
+
+    def remaining(self):
+        return max(0.0, self.total - self.elapsed())
+
+    def expired(self):
+        return self.remaining() <= 0
+
+
+def new_budget(clock=time.monotonic):
+    return TimeBudget(settings()["action_budget_seconds"], clock)
 
 
 def _schema(properties, required=None):
@@ -166,13 +200,15 @@ def _call_tool(impl, tool_input):
         return f"Tool failed: {type(exc).__name__}: {exc}", True
 
 
-def run(system, user_message, tools, tool_impls, submit, client=None, max_turns=MAX_TURNS):
-    """Run one agent until it calls its submit tool.
+def run(system, user_message, tools, tool_impls, submit, client=None, max_turns=MAX_TURNS, budget=None):
+    """Run one agent until it calls its submit tool, a turn limit, or its time budget runs out.
 
+    Pass the action's shared `budget` so a specialist can't use time the agent already spent.
     Returns {"answer": dict or None, "tool_calls": [names], "stop_reason": str, "model_calls": int}.
     """
     live = client is None
     config = settings()
+    budget = budget or new_budget()
     if live:
         client = make_client()
 
@@ -190,8 +226,12 @@ def run(system, user_message, tools, tool_impls, submit, client=None, max_turns=
         return {"answer": answer, "tool_calls": calls, "stop_reason": stop_reason, "model_calls": turns}
 
     for turn in range(1, max_turns + 1):
+        if budget.remaining() < MIN_ATTEMPT_SECONDS:
+            return done(None, "time_budget", turn - 1)
+        # One attempt gets at most its share of what is left, so the SDK's retries can't overrun the budget.
+        attempt = min(config["timeout_seconds"], budget.remaining() / (config["max_retries"] + 1))
         try:
-            response = client.messages.create(messages=messages, **request)
+            response = client.messages.create(messages=messages, timeout=attempt, **request)
         except Exception as exc:
             if live:
                 record_live_result("error", config["model"], type(exc).__name__)

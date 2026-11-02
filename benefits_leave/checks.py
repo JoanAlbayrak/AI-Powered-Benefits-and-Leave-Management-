@@ -210,6 +210,10 @@ def reconcile_vendor_confirmations(handoff, data=None):
         elif conf["status"] == "pending":
             results.append({"benefit": benefit, "vendor": record["vendor"], "result": "pending",
                             "detail": "Vendor has not finished processing"})
+        elif conf["status"] == "documents_requested":
+            doc = conf.get("requested_doc") or "additional documentation"
+            results.append({"benefit": benefit, "vendor": record["vendor"], "result": "documents_requested",
+                            "detail": f"Vendor requests: {doc}", "requested_doc": doc})
         else:
             problems = []
             for field in ("plan", "tier", "contribution_percent"):

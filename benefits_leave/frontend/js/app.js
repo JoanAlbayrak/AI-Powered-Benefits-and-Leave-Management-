@@ -26,7 +26,7 @@ function paintWorkflow() {
     : message ? notice(message.text, message.tone) : '';
   region.hidden = !region.innerHTML;
   document.querySelectorAll('[data-workflow-action]').forEach(button => { button.disabled = workflow.blocked || button.dataset.locked === 'true'; });
-  document.querySelectorAll('#hr-decision-form, #vendor-sent-form, #enrollment-help-form, #leave-draft-form, #leave-confirm-form').forEach(form => {
+  document.querySelectorAll('#hr-decision-form, #vendor-sent-form, #enrollment-help-form, #leave-draft-form, #leave-confirm-form, #leave-resubmit-form, #doc-resolution-form, .workflow-form').forEach(form => {
     form.setAttribute('aria-busy', String(workflow.pending));
     form.querySelectorAll('select, textarea, input').forEach(input => { input.disabled = workflow.blocked; });
   });
@@ -48,7 +48,9 @@ async function performAction(action, successText) {
   if (outcome.error) {
     feedback.set(origin.key, { text: outcome.error.message, tone: 'error' });
     if (outcome.error.outcomeUnknown) uncertainOrigin = origin;
-    paintWorkflow();
+    // A conflict means the case changed: show the latest version (the message stays visible) instead of a stale form.
+    if (outcome.error.stale && origin.key === contextKey()) await load();
+    else paintWorkflow();
     if (origin.key === contextKey()) document.getElementById('workflow-feedback')?.focus();
     return;
   }
@@ -64,10 +66,16 @@ function shell(route) {
   const identity = route.role === 'hr' ? 'HR specialist preview' : person?.name || 'Employee preview';
   const initials = route.role === 'hr' ? 'HR' : person?.id.slice(-2) || 'EE';
   const active = route.page === 'cases' ? route.role === 'hr' ? 'queue' : 'overview' : route.page;
-  app.innerHTML = `<header class="topbar"><div class="actions"><button id="menu-toggle" class="mobile-menu" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">${icon('menu')}</button><a class="brand" href="#/${route.role}/${navigation[route.role][0].id}"><span class="brandmark">${icon('shield')}</span><span>Benefits & Leave<small>Your workplace, simplified</small></span></a></div><div class="toptools"><div class="preview-toggle" role="group" aria-label="Demo workspace preview"><button data-preview="employee" aria-label="Employee preview" aria-pressed="${route.role === 'employee'}"><span class="desktop-label">Employee preview</span><span class="mobile-label" aria-hidden="true">Employee</span></button><button data-preview="hr" aria-label="HR preview" aria-pressed="${route.role === 'hr'}"><span class="desktop-label">HR preview</span><span class="mobile-label" aria-hidden="true">HR</span></button></div><div class="profile"><span class="avatar" aria-hidden="true">${escape(initials)}</span><div><b>${escape(identity)}</b><small>${route.role === 'hr' ? 'Demo review workspace' : escape(person?.id || 'Demo profile')}</small></div></div></div></header><aside class="sidebar" id="sidebar"><div class="nav-label">${route.role === 'hr' ? 'HR case center' : 'Personal workspace'}</div><nav class="nav-list" aria-label="${route.role === 'hr' ? 'HR' : 'Employee'} navigation">${navigation[route.role].map(item => `<a class="nav-link" href="#/${route.role}/${item.id}" ${active === item.id ? 'aria-current="page"' : ''}>${icon(item.icon)}${item.label}</a>`).join('')}</nav><div class="sidebar-bottom"><b>Built around clear next steps.</b><p>Computer checks. AI explains.<br>People make the decisions.</p><a href="/legacy" target="_blank" rel="noopener">Open existing workflow demo ${icon('external')}</a></div></aside><div class="main-wrap"><div class="contextbar"><span class="context-note">${icon('info')}Demo workspace · fictional records · no real sign-in</span><span id="ai-status" class="ai-status-slot" role="status">${aiStatusBadge(state.ai)}</span>${route.role === 'employee' ? `<div class="context-picker"><label for="employee-picker">Demo profile</label><select id="employee-picker">${state.people.map(person => `<option value="${escape(person.id)}" ${person.id === state.employeeId ? 'selected' : ''}>${escape(person.id)} · ${escape(person.name)}</option>`).join('')}</select></div>` : `<span>Case store resets when the server restarts.</span>`}</div><main class="main" id="main" tabindex="-1" aria-busy="true">${loadingView()}</main></div>`;
+  app.innerHTML = `<header class="topbar"><div class="actions"><button id="menu-toggle" class="mobile-menu" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">${icon('menu')}</button><a class="brand" href="#/${route.role}/${navigation[route.role][0].id}"><span class="brandmark">${icon('shield')}</span><span>Benefits & Leave<small>Your workplace, simplified</small></span></a></div><div class="toptools"><div class="preview-toggle" role="group" aria-label="Demo workspace preview"><button data-preview="employee" aria-label="Employee preview" aria-pressed="${route.role === 'employee'}"><span class="desktop-label">Employee preview</span><span class="mobile-label" aria-hidden="true">Employee</span></button><button data-preview="hr" aria-label="HR preview" aria-pressed="${route.role === 'hr'}"><span class="desktop-label">HR preview</span><span class="mobile-label" aria-hidden="true">HR</span></button></div><div class="profile"><span class="avatar" aria-hidden="true">${escape(initials)}</span><div><b>${escape(identity)}</b><small>${route.role === 'hr' ? 'Demo review workspace' : escape(person?.id || 'Demo profile')}</small></div></div></div></header><aside class="sidebar" id="sidebar"><div class="nav-label">${route.role === 'hr' ? 'HR case center' : 'Personal workspace'}</div><nav class="nav-list" aria-label="${route.role === 'hr' ? 'HR' : 'Employee'} navigation">${navigation[route.role].map(item => `<a class="nav-link" href="#/${route.role}/${item.id}" ${active === item.id ? 'aria-current="page"' : ''}>${icon(item.icon)}${item.label}</a>`).join('')}</nav><div class="sidebar-bottom"><b>Built around clear next steps.</b><p>Computer checks. AI explains.<br>People make the decisions.</p><a href="/legacy" target="_blank" rel="noopener">Open existing workflow demo ${icon('external')}</a></div></aside><div class="main-wrap"><div class="contextbar"><span class="context-note">${icon('info')}Demo workspace · fictional records · no real sign-in</span><span id="ai-status" class="ai-status-slot" role="status">${aiStatusBadge(state.ai)}</span>${route.role === 'employee' ? `<div class="context-picker"><label for="employee-picker">Demo profile</label><select id="employee-picker">${state.people.map(person => `<option value="${escape(person.id)}" ${person.id === state.employeeId ? 'selected' : ''}>${escape(person.id)} · ${escape(person.name)}</option>`).join('')}</select></div>` : `<span>Case store resets when the server restarts or you reset the demo.</span>`}<button class="btn" id="reset-demo" type="button" title="Forget every case, draft and edit, and re-read the data files">Reset demo data</button></div><main class="main" id="main" tabindex="-1" aria-busy="true">${loadingView()}</main></div>`;
   document.querySelectorAll('[data-preview]').forEach(button => button.onclick = () => {
     const role = button.dataset.preview;
     location.hash = `/${role}/${navigation[role][0].id}`;
+  });
+  document.getElementById('reset-demo')?.addEventListener('click', () => {
+    if (!confirm('Reset the demo? Every case, draft and edit is forgotten and the data files are read again. Fictional data only.')) return;
+    state.people = [];               // the data files may have changed: load the people again
+    location.hash = `/${route.role}/${navigation[route.role][0].id}`;
+    performAction(() => api.resetDemo(), 'Demo reset. Every case, draft and edit is back to the starting data.');
   });
   document.getElementById('menu-toggle').onclick = () => {
     state.menuOpen = !state.menuOpen;
@@ -98,6 +106,21 @@ function bindView() {
     if (note) { note.hidden = shown > 0; note.textContent = type ? 'No document is required for this leave type.' : 'Choose a leave type to see required documents.'; }
   };
   document.getElementById('leave-type')?.addEventListener('change', showDocs);
+  const intakeForm = document.getElementById('leave-intake-form');
+  intakeForm?.addEventListener('submit', event => {
+    event.preventDefault();
+    const description = document.getElementById('leave-description')?.value.trim();
+    if (!description) return;
+    const employeeId = state.employeeId;
+    performAction(() => api.leaveIntake(employeeId, description), 'The Leave Agent reviewed your description.');
+  });
+  document.getElementById('use-intake-suggestion')?.addEventListener('click', event => {
+    const select = document.getElementById('leave-type');
+    if (!select) return;
+    select.value = event.currentTarget.dataset.leaveType;
+    select.dispatchEvent(new Event('change'));
+    select.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
   leaveForm?.addEventListener('submit', event => {
     event.preventDefault();
     const form = new FormData(leaveForm);
@@ -116,6 +139,41 @@ function bindView() {
     const employeeId = state.employeeId;
     performAction(() => api.checkEnrollment(employeeId), 'Enrollment checked. Review the findings below; HR makes the decision.');
   });
+  document.querySelectorAll('.election-form').forEach(form => {
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      const benefit = form.dataset.benefit;
+      const intent = event.submitter?.dataset.intent || 'save';
+      const data = new FormData(form);
+      const status = data.get('status');
+      let fields;
+      if (benefit === 'retirement') {
+        fields = status === 'elected' ? { status, percent: Number(data.get('percent')) } : { status };
+      } else if (status === 'elected') {
+        const [plan, tier] = (data.get('plan_tier') || '').split('|');
+        fields = { status, plan, tier };
+      } else {
+        fields = { status };
+      }
+      const employeeId = state.employeeId;
+      if (intent === 'consider') {
+        performAction(() => api.considerElection(employeeId, benefit, fields), 'The Enrollment Agent reviewed this choice. Nothing was saved.');
+      } else {
+        performAction(() => api.electBenefit(employeeId, benefit, fields), 'Election saved.');
+      }
+    });
+  });
+  const dependentForm = document.getElementById('dependent-add-form');
+  dependentForm?.addEventListener('submit', event => {
+    event.preventDefault();
+    const data = new FormData(dependentForm);
+    const employeeId = state.employeeId;
+    performAction(() => api.addDependent(employeeId, data.get('relationship'), data.get('name')), 'Dependent added.');
+  });
+  document.querySelectorAll('[data-mark-uploaded]').forEach(button => button.addEventListener('click', () => {
+    const employeeId = state.employeeId;
+    performAction(() => api.markDocumentUploaded(employeeId, button.dataset.relationship, button.dataset.name), 'Marked as uploaded. It stays open until HR verifies it.');
+  }));
   const helpForm = document.getElementById('enrollment-help-form');
   document.querySelectorAll('[data-help-suggestion]').forEach(button => button.addEventListener('click', () => {
     const field = document.getElementById('help-question');
@@ -146,7 +204,37 @@ function bindView() {
     }
     const id = decisionForm.dataset.caseId;
     const selected = decision.value;
-    performAction(() => api.decide(id, selected, reason), 'HR decision recorded.');
+    const revision = decisionForm.dataset.reviewRevision === '' ? undefined : Number(decisionForm.dataset.reviewRevision);
+    performAction(() => api.decide(id, selected, reason, revision), 'HR decision recorded.');
+  });
+  document.querySelectorAll('[data-workflow-action="verify-document"]').forEach(button => button.addEventListener('click', () => {
+    const revision = button.dataset.reviewRevision === '' ? undefined : Number(button.dataset.reviewRevision);
+    performAction(() => api.verifyDocument(button.dataset.caseId, button.dataset.evidenceRef, revision), 'Document marked verified by HR.');
+  }));
+  const resolutionForm = document.getElementById('doc-resolution-form');
+  resolutionForm?.addEventListener('submit', event => {
+    event.preventDefault();
+    const resolution = document.getElementById('doc-resolution').value;
+    const reason = document.getElementById('doc-reason').value.trim();
+    if (resolution !== 'verify_documents' && !reason) {
+      feedback.set(contextKey(), { text: 'Add a reason for this step.', tone: 'error' });
+      paintWorkflow();
+      document.getElementById('doc-reason').focus();
+      return;
+    }
+    performAction(() => api.resolveLeaveDocuments(resolutionForm.dataset.caseId, resolution, reason), 'Document step recorded.');
+  });
+  document.querySelectorAll('[data-workflow-action="provide-document"]').forEach(button => button.addEventListener('click', () => {
+    const employeeId = state.employeeId;
+    performAction(() => api.provideLeaveDocument(employeeId, button.dataset.caseId, button.dataset.document), 'Marked as provided. HR will check it; it is not verified yet.');
+  }));
+  const resubmitForm = document.getElementById('leave-resubmit-form');
+  resubmitForm?.addEventListener('submit', event => {
+    event.preventDefault();
+    const form = new FormData(resubmitForm);
+    const fields = { leave_type: form.get('leave_type'), start_date: form.get('start_date'), end_date: form.get('end_date'), schedule: form.get('schedule'), reason: form.get('reason'), documents_attached: form.getAll('documents') };
+    const employeeId = state.employeeId;
+    performAction(() => api.resubmitLeave(employeeId, resubmitForm.dataset.caseId, fields), 'Your corrected request was sent back to HR. It is not approved yet.');
   });
   document.querySelector('[data-workflow-action="prepare"]')?.addEventListener('click', event => {
     const id = event.currentTarget.dataset.caseId;
@@ -168,7 +256,7 @@ function bindView() {
     const query = document.getElementById('case-search')?.value.trim().toLowerCase() || '';
     let visible = 0;
     rows.forEach(row => {
-      const matchesFilter = filter === 'all' || (filter === 'review' ? ['incomplete', 'ready_for_hr_review', 'info_requested'].includes(row.dataset.status) : ['approved', 'vendor_records_ready', 'sent_to_vendors', 'vendor_follow_up', 'vendor_confirmed'].includes(row.dataset.status));
+      const matchesFilter = filter === 'all' || (filter === 'review' ? ['incomplete', 'ready_for_hr_review', 'info_requested', 'approved_documents_received'].includes(row.dataset.status) : ['approved', 'vendor_records_ready', 'sent_to_vendors', 'vendor_follow_up', 'vendor_confirmed'].includes(row.dataset.status));
       const matches = matchesFilter && row.dataset.search.includes(query);
       row.hidden = !matches;
       if (matches) visible++;
