@@ -12,7 +12,7 @@ run (no API key, no internet), the code results are still returned.
 """
 
 from benefits_leave import checks
-from benefits_leave.runner import read_tool, run, submit_tool
+from benefits_leave.runner import AIUnavailable, read_tool, run, settings, submit_tool
 
 SHARED_RULES = (
     "Use only facts from your tools. Never invent plans, prices, dates, documents or vendor details. "
@@ -159,10 +159,21 @@ def _safe_run(system, user_message, read_tools, impls, submit, client):
 
 def _friendly_error(exc):
     name = type(exc).__name__
+    if isinstance(exc, AIUnavailable):
+        return str(exc)
     if "Authentication" in name:
         return "The API key was not accepted. Check ANTHROPIC_API_KEY in your .env file."
-    if "Connection" in name or "Timeout" in name:
+    if "PermissionDenied" in name or "NotFound" in name:
+        return (f"The model '{settings()['model']}' isn't available to this API key. "
+                "Set ANTHROPIC_MODEL in your .env file.")
+    if "RateLimit" in name:
+        return "Claude is rate limited right now. Wait a moment and try again."
+    if "Timeout" in name:
+        return "Claude took too long to answer. Try again, or raise ANTHROPIC_TIMEOUT_SECONDS."
+    if "Connection" in name:
         return "Could not reach Claude. Check your internet connection."
+    if "BadRequest" in name:
+        return "Claude rejected the request settings. Run: python -m benefits_leave.readiness --live"
     if isinstance(exc, ModuleNotFoundError):
         return "The Anthropic library isn't installed. Run: .venv/bin/pip install -r requirements.txt"
     return f"The AI explanation is unavailable ({name})."
