@@ -136,41 +136,64 @@ def run_enrollment_help(employee_id, question, earlier=(), client=None, data=Non
 
 VENDOR_PROMPT = (
     "You are the Vendor Agent. For an enrollment HR has already approved, you help HR coordinate with "
-    "benefit vendors. Call get_handoff (exactly what HR approved, handed over from the enrollment side) and "
-    "get_vendor_confirmations. In hr_summary: 2-4 sentences on "
-    "what is ready to send, what each vendor confirmed, and what needs follow-up. In follow_ups: one item "
-    "for every vendor whose result is discrepancy, pending or no_confirmation (none for confirmed ones), "
-    "each with a short, polite draft message HR can send to that vendor. Drafts only: you never send them. "
-    + SHARED_RULES
+    "benefit vendors. Call get_handoff (exactly what HR approved, handed over from the enrollment side), "
+    "get_vendor_confirmations and get_vendor_policy. When a vendor result is a discrepancy, call "
+    "consult_enrollment_specialist once, before drafting, to ask the Enrollment Agent what HR approved for "
+    "that benefit and whether the employee's records support the vendor's version. Use its finding and "
+    "evidence_refs in your summary and in that vendor's draft; if it returns unavailable, say the approved "
+    "intent could not be confirmed by the specialist and rely only on the handoff. You may consult at most "
+    "once. In hr_summary: 2-4 sentences on what each vendor confirmed, what needs follow-up and what the "
+    "specialist found. In follow_ups: one item for every vendor whose result is discrepancy, pending or "
+    "no_confirmation (none for confirmed ones), each with a short, polite draft message HR can send to that "
+    "vendor and the evidence_refs it relies on. Drafts only: you never send them. " + SHARED_RULES
 )
+
+CONSULT_TOOL = input_tool(
+    "consult_enrollment_specialist",
+    "Ask the Enrollment Agent about the HR-approved enrollment intent for one benefit in this case. Workflow "
+    "code checks the request; at most one consultation per run.",
+    {"question_type": {"type": "string", "enum": ["approved_enrollment_intent"]},
+     "benefit": {"type": "string"},
+     "question": {"type": "string"}})
 
 
 class HandoffError(ValueError):
     """The packet handed to an agent is incomplete or inconsistent, so the agent won't run."""
 
 
-def run_vendor_agent(handoff, client=None, data=None):
-    """Runs only on the handoff HR approved. A bad handoff stops here: nothing is guessed."""
+def run_vendor_agent(handoff, client=None, data=None, consult=None):
+    """Runs only on the handoff HR approved. A bad handoff stops here: nothing is guessed.
+
+    `consult` is supplied by workflow code. The agent never calls another agent directly.
+    """
     problems = checks.validate_vendor_handoff(handoff)
     if problems:
         raise HandoffError("; ".join(problems))
     data = data or checks.load_data()
     records = handoff["records"]
     reconciliation = checks.reconcile_vendor_confirmations(handoff, data)
+    tools = [read_tool("get_handoff", "The approved enrollment handed over from the enrollment side: "
+                                      "vendor records, HR's approval note and the Enrollment Agent's summary."),
+             read_tool("get_vendor_confirmations", "Each vendor's confirmation compared with what was sent."),
+             read_tool("get_vendor_policy", "Approved demo policy for vendor follow-up, with versioned refs.")]
+    impls = {"get_handoff": lambda: handoff, "get_vendor_confirmations": lambda: reconciliation,
+             "get_vendor_policy": lambda: checks.policy_entries("vendor", data)}
+    if consult is not None:
+        tools.append(CONSULT_TOOL)
+        impls["consult_enrollment_specialist"] = consult
     result = _safe_run(
         VENDOR_PROMPT,
         "Prepare the vendor coordination summary for this approved enrollment.",
-        [read_tool("get_handoff", "The approved enrollment handed over from the enrollment side: "
-                                  "vendor records, HR's approval note and the Enrollment Agent's summary."),
-         read_tool("get_vendor_confirmations", "Each vendor's confirmation compared with what was sent.")],
-        {"get_handoff": lambda: handoff, "get_vendor_confirmations": lambda: reconciliation},
+        tools, impls,
         submit_tool("submit_vendor_summary", "Submit the HR summary and follow-up drafts.",
                     {"hr_summary": {"type": "string"},
                      "follow_ups": {"type": "array", "items": {
                          "type": "object",
                          "properties": {"vendor": {"type": "string"}, "issue": {"type": "string"},
-                                        "draft_message": {"type": "string"}},
-                         "required": ["vendor", "issue", "draft_message"], "additionalProperties": False}}}),
+                                        "draft_message": {"type": "string"},
+                                        "evidence_refs": {"type": "array", "items": {"type": "string"}}},
+                         "required": ["vendor", "issue", "draft_message", "evidence_refs"],
+                         "additionalProperties": False}}}),
         client,
     )
     result["follow_ups"] = _complete_follow_ups(reconciliation, (result["ai"] or {}).get("follow_ups", []))
@@ -185,11 +208,57 @@ def _complete_follow_ups(reconciliation, drafted):
         if item["result"] == "confirmed":
             continue
         follow_ups.append(by_vendor.get(item["vendor"]) or {
-            "vendor": item["vendor"], "issue": item["detail"],
+            "vendor": item["vendor"], "issue": item["detail"], "evidence_refs": [],
             "draft_message": (f"Hello, we're following up on a {item['benefit']} enrollment we sent. "
                               f"{item['detail']}. Could you please confirm the current status? Thank you."),
         })
     return follow_ups
+
+
+# --- Enrollment Agent as a specialist for the Vendor Agent (T05) ------------------------
+
+SPECIALIST_PROMPT = (
+    "You are the Enrollment Agent, answering a question from the Vendor Agent about what HR approved for one "
+    "benefit. Call get_approved_record (the frozen record HR approved: the source of truth), "
+    "get_dependent_records (the employee's dependents and proof documents, current status) and "
+    "get_enrollment_policy. Answer only from these tools. Never use or guess current editable elections, and "
+    "never suggest changing the approval to match a vendor. In finding: 1-3 sentences stating the approved "
+    "plan and tier, whether the employee's dependent and proof records could support any other tier, and any "
+    "cost or coverage consequence shown in the tools. evidence_refs: the record ref and any document ids or "
+    "policy refs you used. unknowns: what the tools cannot establish (for example whether the vendor processed "
+    "a later change). proposed_next_action: one step for HR. status: answered, or unavailable if the tools do "
+    "not let you answer. " + SHARED_RULES
+)
+
+
+def run_enrollment_specialist(snapshot, dependents, question, client=None, data=None):
+    """Read-only specialist run. It has no consultation tool, so it cannot call anyone back."""
+    data = data or checks.load_data()
+    policy = checks.policy_entries("enrollment", data) + [
+        e for e in checks.policy_entries("vendor", data) if e["ref"] not in
+        {p["ref"] for p in checks.policy_entries("enrollment", data)}]
+    result = _safe_run(
+        SPECIALIST_PROMPT,
+        f"Question from the Vendor Agent (relayed by workflow code):\n<question>{question}</question>",
+        [read_tool("get_approved_record", "The frozen HR-approved record for this benefit, with its ref."),
+         read_tool("get_dependent_records", "The employee's dependents and proof document status."),
+         read_tool("get_enrollment_policy", "Approved demo enrollment and vendor policy with versioned refs.")],
+        {"get_approved_record": lambda: snapshot, "get_dependent_records": lambda: dependents,
+         "get_enrollment_policy": lambda: policy},
+        submit_tool("submit_specialist_finding", "Submit the finding for the Vendor Agent.",
+                    {"status": {"type": "string", "enum": ["answered", "unavailable"]},
+                     "finding": {"type": "string"},
+                     "evidence_refs": {"type": "array", "items": {"type": "string"}},
+                     "unknowns": {"type": "array", "items": {"type": "string"}},
+                     "proposed_next_action": {"type": "string"}}),
+        client,
+        max_turns=4,
+    )
+    allowed = {snapshot["ref"], *{p["ref"] for p in policy},
+               *{d["evidence_ref"] for d in dependents.get("documents", []) if d.get("evidence_ref")}}
+    if result["ai"]:
+        result["ai"]["evidence_refs"] = [r for r in result["ai"].get("evidence_refs", []) if r in allowed]
+    return result
 
 
 # --- Leave Agent -------------------------------------------------------------------------
@@ -226,14 +295,16 @@ def run_leave_agent(request, client=None, data=None, lookup=None):
 
 # --- Shared ------------------------------------------------------------------------------
 
-def _safe_run(system, user_message, read_tools, impls, submit, client):
+def _safe_run(system, user_message, read_tools, impls, submit, client, max_turns=None):
     try:
-        outcome = run(system, user_message, read_tools, impls, submit, client=client)
+        kwargs = {"max_turns": max_turns} if max_turns else {}
+        outcome = run(system, user_message, read_tools, impls, submit, client=client, **kwargs)
     except Exception as exc:  # the code results still go to the employee and HR
-        return {"ai": None, "ai_error": _friendly_error(exc)}
+        return {"ai": None, "ai_error": _friendly_error(exc), "model_calls": 0}
     if outcome["answer"] is None:
-        return {"ai": None, "ai_error": f"The AI explanation is unavailable ({outcome['stop_reason']})."}
-    return {"ai": outcome["answer"], "ai_error": None}
+        return {"ai": None, "ai_error": f"The AI explanation is unavailable ({outcome['stop_reason']}).",
+                "model_calls": outcome["model_calls"]}
+    return {"ai": outcome["answer"], "ai_error": None, "model_calls": outcome["model_calls"]}
 
 
 def _friendly_error(exc):
