@@ -109,7 +109,7 @@ const Demo = (() => {
                           "enrollment_summary", "records"];
 
   function buildVendorHandoff(caseId, employeeId, data, hrReason = "", enrollmentSummary = null) {
-    return { case_id: caseId, employee_id: employeeId, employee_name: data.new_hires[employeeId].name,
+    return { case_id: caseId, snapshot_ref: `${caseId}:approved:1`, employee_id: employeeId, employee_name: data.new_hires[employeeId].name,
              approved_as_of: data.as_of, hr_reason: hrReason, enrollment_summary: enrollmentSummary,
              records: vendorRecords(employeeId, data) };
   }

@@ -92,6 +92,35 @@
         "retirement": {"status": "elected", "percent": 6}
       },
       "dependents": []
+    },
+    "E2005": {
+      "name": "Test New Hire E",
+      "start_date": "2026-10-14",
+      "weekly_hours": 40,
+      "work_state": "NY",
+      "elections": {
+        "medical": {"status": "elected", "plan": "Bronze HMO", "tier": "employee_children"},
+        "dental": {"status": "waived"},
+        "vision": {"status": "waived"},
+        "retirement": {"status": "elected", "percent": 4}
+      },
+      "dependents": [{"name": "Child of E", "relationship": "child", "proof_received": false}]
+    },
+    "E2006": {
+      "name": "Test New Hire F",
+      "start_date": "2026-10-07",
+      "weekly_hours": 40,
+      "work_state": "NY",
+      "elections": {
+        "medical": {"status": "elected", "plan": "Silver PPO", "tier": "family"},
+        "dental": {"status": "elected", "plan": "Plus Dental", "tier": "family"},
+        "vision": {"status": "waived"},
+        "retirement": {"status": "not_started"}
+      },
+      "dependents": [
+        {"name": "Spouse of F", "relationship": "spouse", "proof_received": true},
+        {"name": "Child of F", "relationship": "child", "proof_received": true}
+      ]
     }
   },
   "vendor_confirmations": {
@@ -109,5 +138,42 @@
       "bonding": {"label": "Bonding with a new child", "required_documents": ["birth or placement record"]},
       "personal": {"label": "Personal leave", "required_documents": []}
     }
+  },
+  "evidence": {
+    "_note": "Fictional document metadata only: no real files. received = uploaded, not yet checked by HR; verified = HR checked it. Only verified proof sets proof_received in new_hires.",
+    "E2001": [
+      {"id": "EV-E2001-01", "employee_id": "E2001", "scope": "enrollment", "requirement": "marriage certificate", "dependent": "Spouse of A",
+       "state": "received", "received_on": "2026-10-24", "channel": "employee portal upload", "verified_by": null, "verified_on": null}
+    ],
+    "E2005": [],
+    "E2006": [
+      {"id": "EV-E2006-01", "employee_id": "E2006", "scope": "enrollment", "requirement": "marriage certificate", "dependent": "Spouse of F",
+       "state": "verified", "received_on": "2026-10-09", "channel": "employee portal upload", "verified_by": "HR specialist (demo)", "verified_on": "2026-10-12"},
+      {"id": "EV-E2006-02", "employee_id": "E2006", "scope": "enrollment", "requirement": "birth certificate", "dependent": "Child of F",
+       "state": "verified", "received_on": "2026-10-09", "channel": "employee portal upload", "verified_by": "HR specialist (demo)", "verified_on": "2026-10-12"}
+    ]
+  },
+  "policy_library": {
+    "_note": "Synthetic employer rules written for this demo. The FMLA entry summarizes federal basics for illustration only; it is not legal advice.",
+    "entries": [
+      {"id": "DEMO-ENR-WINDOW", "version": 1, "effective_from": "2026-01-01", "applies_to": ["enrollment"], "source": "Synthetic demo employer policy",
+       "title": "Enrollment window", "text": "New hires have 30 days from their start date to choose or waive each benefit. Missing the window requires an HR exception."},
+      {"id": "DEMO-ENR-DEPENDENT-PROOF", "version": 1, "effective_from": "2026-01-01", "applies_to": ["enrollment", "vendor"], "source": "Synthetic demo employer policy",
+       "title": "Dependent proof", "text": "Covering a spouse needs a marriage certificate; covering a child needs a birth certificate. A received document waits for HR verification, and the item stays open until HR verifies it. A tier that covers dependents cannot be approved without verified proof for each dependent."},
+      {"id": "DEMO-ENR-ELIGIBILITY", "version": 1, "effective_from": "2026-01-01", "applies_to": ["enrollment"], "source": "Synthetic demo employer policy",
+       "title": "Benefits eligibility", "text": "Medical, dental and vision require at least 30 scheduled hours per week. HR may approve a documented exception with a reason."},
+      {"id": "DEMO-ENR-COVERAGE-START", "version": 1, "effective_from": "2026-01-01", "applies_to": ["enrollment", "vendor"], "source": "Synthetic demo employer policy",
+       "title": "Coverage start", "text": "Coverage starts on the first day of the month after the start date."},
+      {"id": "DEMO-401K-MATCH", "version": 1, "effective_from": "2026-01-01", "applies_to": ["enrollment"], "source": "Synthetic demo employer policy",
+       "title": "401(k) match", "text": "The employer matches 100% of the employee's contribution up to 4% of pay. The contribution amount is the employee's choice."},
+      {"id": "DEMO-VENDOR-SOURCE-OF-TRUTH", "version": 1, "effective_from": "2026-01-01", "applies_to": ["vendor"], "source": "Synthetic demo employer policy",
+       "title": "Approved record is the source of truth", "text": "If a carrier confirmation differs from the HR-approved record, the approved record stands until HR approves a change. HR asks the carrier to correct its record; nobody changes the approval to match the carrier."},
+      {"id": "DEMO-LEAVE-DOCUMENTS", "version": 1, "effective_from": "2026-01-01", "applies_to": ["leave"], "source": "Synthetic demo employer policy",
+       "title": "Leave documents", "text": "Own health and family care leave need a medical certification; bonding leave needs a birth or placement record; personal leave needs no document. HR may request missing documents after submission."},
+      {"id": "DEMO-LEAVE-FMLA-BASICS", "version": 1, "effective_from": "2026-01-01", "applies_to": ["leave"], "source": "Demo summary of federal FMLA basics (29 CFR 825.110), illustration only",
+       "title": "FMLA pre-check basics", "text": "FMLA basics are 12 months of service and 1,250 hours worked in the last 12 months. Not meeting them does not deny every option: HR also checks state leave and company policy. Unknown facts stay unknown."},
+      {"id": "DEMO-LEAVE-CLARIFICATION", "version": 1, "effective_from": "2026-01-01", "applies_to": ["leave", "enrollment"], "source": "Synthetic demo employer policy",
+       "title": "Clarification is not a decision", "text": "Questions from an assistant help an employee prepare a request. They are not HR notices, approvals or denials."}
+    ]
   }
 }

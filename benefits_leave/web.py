@@ -89,6 +89,7 @@ def employee_overview(store, employee_id):
                 selection["cost_per_paycheck"] = store.data["plans"][benefit].get(election.get("plan"), {}).get(election.get("tier"))
             selections.append(selection)
     return {"employee": person, "enrollment": enrollment, "selections": selections,
+            "evidence": checks.evidence_status(employee_id, store.data) if enrollment else [],
             "cases": [employee_view(c) for c in store.employee_cases(employee_id)],
             "as_of": store.data["as_of"],
             "retirement_match": store.data["retirement_plan"]["match_rule"],
