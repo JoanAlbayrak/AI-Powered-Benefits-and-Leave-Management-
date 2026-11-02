@@ -14,8 +14,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-from benefits_leave.workflow import CaseStore, WorkflowError
-from benefits_leave import checks
+from benefits_leave.workflow import LEAVE_SCHEDULES, CaseStore, WorkflowError
+from benefits_leave import checks, runner
 from benefits_leave.hr_lookup import load_fake_hr_data
 
 PAGE = (Path(__file__).resolve().parent / "web_page.html").read_bytes()
@@ -53,11 +53,31 @@ def people(store):
 def employee_view(case):
     """What an employee may see about their own case: no HR notes or internal flags."""
     view = {"id": case["id"], "kind": case["kind"], "status": case["status"],
-            "employee_update": case["employee_update"]}
+            "employee_update": case["employee_update"],
+            "activity": [{k: v for k, v in a.items() if k != "visibility"}
+                         for a in case.get("activity", []) if a["visibility"] == "employee"]}
     if case["kind"] == "leave":
-        view["leave_type"] = case["check"]["leave_type_label"]
+        check = case["check"]
+        view["leave_type"] = check["leave_type_label"]
         view["dates"] = [case["request"].get("start_date"), case["request"].get("end_date")]
+        view["schedule"] = case["request"].get("schedule")
+        view["missing"] = check["missing_fields"] + [f"Upload: {d}" for d in check["missing_documents"]]
+        view["guidance"] = (case.get("ai") or {}).get("employee_message")
+        view["ai_error"] = case.get("ai_error")
+    else:
+        view["guidance"] = (case.get("ai") or {}).get("employee_message")
+        view["ai_error"] = case.get("ai_error")
     return view
+
+
+def draft_view(draft):
+    """The employee's own draft. It never carries the FMLA pre-check."""
+    return {k: draft.get(k) for k in ("id", "status", "request", "leave_type_label", "missing_fields",
+                                      "missing_documents", "ready_to_confirm", "clarifications", "case_id")}
+
+
+def _employee_turn(turn):
+    return {k: v for k, v in turn.items() if k != "dropped_refs"}
 
 
 def employee_overview(store, employee_id):
@@ -86,6 +106,10 @@ def employee_overview(store, employee_id):
                 selection["cost_per_paycheck"] = store.data["plans"][benefit].get(election.get("plan"), {}).get(election.get("tier"))
             selections.append(selection)
     return {"employee": person, "enrollment": enrollment, "selections": selections,
+            "evidence": checks.evidence_status(employee_id, store.data) if enrollment else [],
+            "help_thread": [_employee_turn(t) for t in store.help_threads.get(employee_id, [])],
+            "leave_drafts": [draft_view(d) for d in store.drafts.values() if d["employee_id"] == employee_id],
+            "leave_schedules": [{"id": k, "label": v} for k, v in LEAVE_SCHEDULES.items()],
             "cases": [employee_view(c) for c in store.employee_cases(employee_id)],
             "as_of": store.data["as_of"],
             "retirement_match": store.data["retirement_plan"]["match_rule"],
@@ -97,6 +121,8 @@ def handle(store, path, body):
     eid = body.get("employee_id", "")
     if path == "/api/people":
         return {"people": people(store)}
+    if path == "/api/ai/status":
+        return runner.readiness()     # local configuration only: no model call, never the key
     if path == "/api/employee/overview":
         return employee_overview(store, eid)
     if path == "/api/employee/enrollment":
@@ -106,6 +132,10 @@ def handle(store, path, body):
                 "enrollment": {k: s[k] for k in ("name", "deadline", "days_left", "enrollment_state",
                                                  "done", "missing", "notes")},
                 "message": (result["ai"] or {}).get("employee_message"), "ai_error": result["ai_error"]}
+    if path == "/api/employee/enrollment/help":
+        turn = store.enrollment_help(eid, body.get("question", ""))
+        return {"turn": _employee_turn(turn),
+                "thread": [_employee_turn(t) for t in store.help_threads.get(eid, [])]}
     if path == "/api/employee/leave":
         request = {k: body.get(k) for k in ("employee_id", "leave_type", "start_date", "end_date", "reason")}
         request["documents_attached"] = body.get("documents_attached") or []
@@ -114,6 +144,14 @@ def handle(store, path, body):
         return {"case": employee_view(case),
                 "missing": check["missing_fields"] + [f"Upload: {d}" for d in check["missing_documents"]],
                 "message": (result["ai"] or {}).get("employee_message"), "ai_error": result["ai_error"]}
+    if path == "/api/employee/leave/draft":
+        fields = {k: body.get(k) for k in ("leave_type", "start_date", "end_date", "schedule", "reason",
+                                           "documents_attached")}
+        draft = store.save_leave_draft(eid, fields)
+        return {"draft": draft_view(draft)}
+    if path == "/api/employee/leave/confirm":
+        _, case, draft = store.confirm_leave_draft(eid, body.get("draft_id"), body.get("confirmed"))
+        return {"case": employee_view(case), "draft": draft_view(draft)}
     if path == "/api/employee/cases":
         return {"cases": [employee_view(c) for c in store.employee_cases(eid)]}
     if path == "/api/hr/queue":
@@ -173,6 +211,9 @@ def main(port=8001):
     server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(store))
     url = f"http://127.0.0.1:{port}"
     print(f"Benefits & Leave agents running at {url}")
+    ai = runner.readiness()
+    print(f"AI: {'configured' if ai['ready'] else 'not ready'} ({ai['model']})"
+          + "".join(f"\n  ! {p}" for p in ai["problems"]))
     print("Press Ctrl + C to stop.")
     threading.Timer(1.0, webbrowser.open, args=[url]).start()
     try:

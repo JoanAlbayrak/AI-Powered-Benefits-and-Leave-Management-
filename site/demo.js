@@ -109,7 +109,7 @@ const Demo = (() => {
                           "enrollment_summary", "records"];
 
   function buildVendorHandoff(caseId, employeeId, data, hrReason = "", enrollmentSummary = null) {
-    return { case_id: caseId, employee_id: employeeId, employee_name: data.new_hires[employeeId].name,
+    return { case_id: caseId, snapshot_ref: `${caseId}:approved:1`, employee_id: employeeId, employee_name: data.new_hires[employeeId].name,
              approved_as_of: data.as_of, hr_reason: hrReason, enrollment_summary: enrollmentSummary,
              records: vendorRecords(employeeId, data) };
   }
@@ -283,12 +283,14 @@ const Demo = (() => {
     get(id) { if (!this.cases[id]) throw new WorkflowError(`No case ${id}`); return this.cases[id]; }
 
     checkEnrollment(employeeId) {
+      let c = Object.values(this.cases).find((x) => x.kind === "enrollment" && x.employee_id === employeeId);
+      if (c && !["incomplete", "ready_for_hr_review", "info_requested"].includes(c.status)) {
+        return [{ status: c.enrollment, ai: c.ai || null, ai_error: c.ai_error || null }, c];
+      }
       const status = enrollmentStatus(employeeId, this.data);
       if (status.status !== "ok") throw new WorkflowError("No enrollment found for this employee");
       const ai = enrollmentAgent(status, this.data);
-      let c = Object.values(this.cases).find((x) => x.kind === "enrollment" && x.employee_id === employeeId);
       const result = { status, ai, ai_error: null };
-      if (c && !["incomplete", "ready_for_hr_review", "info_requested"].includes(c.status)) return [result, c];
       const newStatus = status.missing.length ? "incomplete" : "ready_for_hr_review";
       if (!c) c = this.newCase("enrollment", employeeId, { status: newStatus, enrollment: status, ai });
       else Object.assign(c, { status: newStatus, enrollment: status, ai });

@@ -38,6 +38,7 @@ STEPS = [
     ["decide", "C3", "approve", ""],
     ["prepare", "C3"], ["sent", "C3"], ["check", "C3"],
     ["check", "C1"],
+    ["enroll", "E2002"],                                # reuse decided case without reopening
     ["leave", 0], ["decide", "C5", "approve", ""],
     ["leave", 1], ["decide", "C6", "approve", ""], ["decide", "C6", "request_info", "Please upload the certification"],
     ["decide", "C6", "deny", "x"],                        # blocked: already decided
