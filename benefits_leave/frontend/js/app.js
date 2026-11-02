@@ -48,7 +48,9 @@ async function performAction(action, successText) {
   if (outcome.error) {
     feedback.set(origin.key, { text: outcome.error.message, tone: 'error' });
     if (outcome.error.outcomeUnknown) uncertainOrigin = origin;
-    paintWorkflow();
+    // A conflict means the case changed: show the latest version (the message stays visible) instead of a stale form.
+    if (outcome.error.stale && origin.key === contextKey()) await load();
+    else paintWorkflow();
     if (origin.key === contextKey()) document.getElementById('workflow-feedback')?.focus();
     return;
   }

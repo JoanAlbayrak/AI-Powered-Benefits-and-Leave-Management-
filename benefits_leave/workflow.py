@@ -34,6 +34,10 @@ class WorkflowError(Exception):
     """An action that isn't allowed in the case's current state."""
 
 
+class StaleReviewError(WorkflowError):
+    """HR acted on a version of a case that has since changed. The page should reload it, not retry."""
+
+
 class CaseStore:
     def __init__(self, data=None, client=None, lookup=None):
         self.data = data or checks.load_data()
@@ -320,7 +324,7 @@ class CaseStore:
             raise WorkflowError(f"This case is already {case['status'].replace('_', ' ')}; "
                                 f"documents can't be verified after the decision")
         if expected_revision is not None and expected_revision != case.get("review_revision"):
-            raise WorkflowError("This case changed after you opened it. Reload it and review the updated version.")
+            raise StaleReviewError("This case changed after you opened it. The latest version is shown: review it again.")
         employee_id = case["employee_id"]
         record = next((e for e in self.data.get("evidence", {}).get(employee_id, [])
                        if e["id"] == evidence_ref and e.get("employee_id") == employee_id), None)
@@ -755,13 +759,13 @@ class CaseStore:
     def _revalidate_enrollment_for_decision(self, case, decision, expected_revision):
         """HR decides on the data as it is now, and on the version HR actually looked at."""
         if expected_revision is not None and expected_revision != case.get("review_revision"):
-            raise WorkflowError("This case changed after you opened it. Reload it and review the updated version.")
+            raise StaleReviewError("This case changed after you opened it. The latest version is shown: review it again.")
         if decision != "approve":
             return
         if case["review_fingerprint"] != self._review_fingerprint(case["employee_id"]):
             self._refresh_enrollment_review(case, "selections changed before the decision")
-            raise WorkflowError("The employee's selections changed since this case was reviewed. "
-                                "The review was refreshed; review it again before approving.")
+            raise StaleReviewError("The employee's selections changed since this case was reviewed. "
+                                   "The review was refreshed; review it again before approving.")
 
     def hr_decide(self, case_id, decision, reason="", expected_revision=None):
         case = self.get(case_id)

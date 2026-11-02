@@ -1,8 +1,8 @@
 # Joan handoff: interactive enrollment and leave work
 
-Prepared 2 November 2026. Branch: `feat/interactive-enrollment`.
+Prepared 2 November 2026. Handoff branch: `feat/interactive-enrollment`; continuation branch: `claude/jolly-edison-vkgp9d` (started from it).
 
-**Work-in-progress handoff, not ready to merge.** This branch preserves the latest Claude changes so another teammate can finish them. Do not treat passing tests as proof that every new path is correct.
+**Status (updated 2 November 2026, after the continuation work on `claude/jolly-edison-vkgp9d`):** the five tasks under "Continuation: what was done" are implemented and verified **offline and in a real browser against a scripted model**. **They have not been verified with a live model**: no paid call was made in this continuation. Passing tests are not proof that every path is correct; read "Verification" and "Remaining limitations" before presenting.
 
 ## Download and run
 
@@ -54,50 +54,56 @@ These checkmarks mean code has been written and preserved, not that the feature 
 - [x] Renamed synthetic people and preserved the existing rehearsal records.
 - [x] Added backend regression tests for the new paths and rebuilt the static demo.
 
+## Continuation: what was done (in order)
+
+Each task was committed separately on `claude/jolly-edison-vkgp9d`, started from `feat/interactive-enrollment`.
+
+- [x] **1. Stale enrollment approval (blocking, fixed and regression-tested).** Edits to elections, dependents or documents now refresh an open case's deterministic review and drop its old AI summary (`CaseStore._refresh_enrollment_review`). Every refresh bumps `review_revision`. `hr_decide` revalidates against the live data, rejects a case that changed after HR opened it (the page sends the revision it showed), and the frozen handoff is built from exactly the data that was reviewed. A conflict is a distinct `StaleReviewError`; the page reloads the latest case by itself and shows the message. Regression: E2002 checked as complete, medical changed to Gold HMO/family, approval now fails (`tests/test_stale_review.py`).
+- [x] **2. Employee/HR projection separation (fixed and tested).** One shared employee enrollment projection (`employee_enrollment_view`) now backs the overview, check and election endpoints. `/api/employee/enrollment/elect` no longer returns `hr_flags`, and `/api/employee/enrollment` no longer returns `enrollment_state` (it revealed `needs_hr_exception`). The Enrollment Agent is told flags are internal, and a verbatim-copy guard replaces an employee message that quotes a flag. `tests/test_privacy.py` walks every employee endpoint for E2003 (HR flag) and E1003 (failed FMLA basics).
+- [x] **3. Document and clarification transitions (implemented, role/state rules in the backend).**
+  - HR verifies received dependent proof (`hr_verify_document`, `/api/hr/evidence/verify`). The employee upload path can never set verified; only the case employee's own received record can be verified, only on an open case, and a stale HR view is refused.
+  - `approved_pending_documents` now has a lifecycle: each requested document is `requested` → `received` (employee marks it, label only) → `verified` (HR). Status moves to `approved_documents_received`; HR then verifies and completes the approval, asks again (reason required), or withdraws the approval (reason required).
+  - After an information request the employee corrects the **same** case: leave via `resubmit_leave` (dates, type and schedule must be valid); enrollment by rechecking, which is the resubmission. Edits alone no longer silently re-queue an `info_requested` case for HR.
+  - Employees can only act on their own cases (same "not found" answer for someone else's). The demo has no real login: role is the route prefix (`/api/hr/*` vs `/api/employee/*`) and the employee id the browser sends.
+- [x] **4. Grounding and bounded execution.**
+  - The consider agent now has `get_enrollment_policy` (it was passed the policy but could not read it).
+  - Leave intake now has `get_approved_leave_policy`. A new explicit synthetic entry, `DEMO-LEAVE-BALANCES@v1`, replaces the invented sick-versus-PTO rule. A balance statement that does not cite it is replaced with "HR will confirm which balance applies". Likely documents come from the policy table, not the model.
+  - The cost summary reads the vesting rule from `retirement_plan.vesting_schedule` and cites `DEMO-401K-VESTING@v1`; no data means no claim.
+  - One `TimeBudget` per user action (`runner.py`), shared by the agent and any specialist it consults. Default 90 s (`ANTHROPIC_ACTION_BUDGET_SECONDS`, 10-110), under the page's 120 s action timeout. Each attempt is capped to its share of the remaining time so SDK retries cannot overrun it; a specialist is not started with under 5 s left. A timeout is reported as a clear, recoverable message and the checked results still show.
+- [x] **5. Complete-demo validation and documentation.** Browser rehearsal below; this handoff, the execution board and the demo script are updated.
+
+## Behavior changed (summary for reviewers)
+
+- HR approval of an enrollment can now be refused as stale or incomplete based on live data, not the saved review.
+- New statuses and routes: `approved_documents_received`; `/api/hr/evidence/verify`, `/api/hr/leave/resolve`, `/api/employee/leave/document`, `/api/employee/leave/resubmit`. `hr_decide` accepts an optional `expected_revision`.
+- Employee responses no longer contain `hr_flags` or `enrollment_state`.
+- Cost summary: `retirement_employer_match` no longer includes vesting text; `retirement_vesting` carries the data-driven rule and its policy ref.
+- Leave intake: `balance_note` and `documents_likely_needed` are now constrained as above.
+- The public GitHub Pages demo (`docs/index.html`, `site/demo.js`) is unchanged in behavior; it was rebuilt because the shared data gained a policy entry.
+
 ## Verification actually performed
 
-During the 2 November inspection, **131 Python tests and 24 frontend tests passed**, plus a separate public-page consistency check. The generated-page test was performed against a temporary output file to preserve the working page. The unchanged baseline separately passed 104 Python tests and 24 frontend tests plus that same consistency check.
+On 2 November, on the continuation branch:
 
-No new paid model calls or end-to-end browser rehearsal of the latest extension were performed during this inspection. The live runs recorded in `DEMO-SCRIPT.md` are prior-session results for the earlier journey; they do not establish correctness of every new interactive feature. Existing frontend tests still number 24 and do not fully cover the new forms.
+- **196 Python tests pass** (`python3 -m unittest`), including the website-parity test (Python vs `site/demo.js`) and a check that `docs/index.html` is current.
+- **31 frontend tests pass** (`node --test tests/frontend.test.mjs`).
+- Regression tests were shown to **fail without** each fix, and key behaviors were **mutation-checked** (removing a guard makes a test fail). One mutation (the consultation-level budget check) initially survived because the runner enforces the budget too; a test for the 1-5 second window was added.
+- **Browser rehearsal, 37/37 checks, no console errors** (headless Chromium against the real server and page, with a scripted model; no Anthropic call). Journeys: E2002 enrollment check, HR approval, frozen handoff, prepare, simulated sending, confirmation check, per-issue drafts; E2004 seeded mismatch with Vendor-to-Enrollment consultation; E2001 enrollment question, received-versus-verified, HR verifies a document; E2003 shows no HR flag text to the employee; E1001 leave draft, confirmation, conditional approval, documents provided, HR resolution; E1002 information request and same-case correction; a stale HR approval refused and the page reloading the latest version; and a model that always fails (employee check, HR vendor check) with a clear message and working checks.
+- An earlier rehearsal run found a real UX gap (after a refused stale approval the page kept the old version); it was fixed by the `stale` flag and covered by tests.
 
-## Finish in this order
+**Not verified:** nothing in this continuation used a live model or a real key. The live runs recorded in `DEMO-SCRIPT.md` are earlier-session results for the earlier journey. Run `readiness --live` and rehearse the new interactive paths with a working key before claiming live behavior.
 
-### 1. Fix stale enrollment approval — blocking, reproduced
+## Remaining limitations
 
-- [ ] After an election/dependent/evidence edit, invalidate or refresh the open HR review packet and its guidance.
-- [ ] Recompute completeness and required HR flags immediately before approval; freeze exactly the version HR reviewed. If it changed, require a fresh review.
-- [ ] Add a regression: check E2002 as complete, change medical to Gold HMO/family without dependents, then attempt approval. It must fail.
-
-Observed in the current code: the saved case has zero missing items while the live data has two, but HR approval succeeds and freezes family coverage. `set_election` changes the record; `hr_decide` uses the old `case['enrollment']`. Do not demonstrate this path as guarded until fixed.
-
-### 2. Restore employee/HR projection separation — reproduced
-
-- [ ] Remove `hr_flags` from `/api/employee/enrollment/elect` responses.
-- [ ] Add an endpoint test for E2003 and check every new employee-facing response for internal fields.
-
-Observed: the employee election endpoint returns the internal flags array. Keep it in the HR projection only.
-
-### 3. Finish document lifecycle
-
-- [ ] Add an explicit HR verification action, or clearly restrict the demo route to already-verified fixtures.
-- [ ] Keep received distinct from verified; do not let an employee mark their own evidence verified.
-- [ ] Provide a supported transition to finish an `approved_pending_documents` leave case, or label it as an unfinished terminal demo state.
-- [ ] Complete leave correction/resubmission after an HR information request, or state this limitation in the final script.
-
-At present a new dependent's received proof remains missing and there is no HR verification UI to complete it.
-
-### 4. Check grounding and runtime limits
-
-- [ ] Supply the actual approved policy content to the new consideration/intake tools before relying on policy-based explanations; filtering reference IDs alone does not ground the answer.
-- [ ] Review the hardcoded retirement vesting explanation and sick-versus-PTO suggestions against explicitly labeled demo policy.
-- [ ] Add a shared elapsed-time budget for the Vendor/specialist run, or document the actual per-request/turn limits. Current SDK retries and multiple model calls can exceed the browser's 120-second action timeout.
-
-### 5. Rehearse and finish delivery
-
-- [ ] Exercise election save, unsaved consideration, dependent upload, leave intake, balances and conditional approval in the browser.
-- [ ] Rehearse the latest version with a working key after the blockers are fixed. Clearly distinguish live output from fallbacks.
-- [ ] Update the canonical task log and reconcile stale documentation that says nothing was pushed, merged or tested live.
-- [ ] Review the feature PR before merging. Do not push directly to main.
+- No live-model rehearsal of the new paths (election consideration, free-text leave intake, the new policy tools, the verbatim flag guard, the time budget under real latency).
+- The employee-message flag guard catches a verbatim copy only; a paraphrase relies on the prompt. It is defense in depth, not a proof.
+- Demo identity only: the browser chooses the employee, and "HR" is the `/api/hr/*` route prefix. This is not authentication or authorization.
+- Cases, evidence changes and drafts live in memory and reset on restart. Document upload is metadata only (no file stored).
+- Verifying a document or resolving pending leave documents records that HR checked it; there is no reviewer identity, timestamp history or reversal.
+- HR cannot reject a received enrollment document with a reason from the UI (it can request information on the case instead).
+- Enrollment resubmission after an information request is the existing "Recheck enrollment" action; there is no separate form.
+- The time budget bounds model time, not tool time (tools are local and fast) or browser network time.
+- The public website is a separate, simplified static demo (example agent text, no editing flows).
 
 ## File map
 
@@ -106,6 +112,7 @@ At present a new dependent's received proof remains missing and there is no HR v
 - `agents.py`: unsaved-choice explanation, free-text leave intake and vendor document-request wording.
 - `frontend/js/`: new forms, API calls and rendering.
 - `hr_lookup.py` / fictional JSON: categorized balances, plan metadata and people.
-- `tests/`: new backend coverage; new frontend-path coverage still needed.
+- `tests/`: `test_stale_review.py`, `test_privacy.py`, `test_transitions.py`, `test_grounding.py` plus extended `frontend.test.mjs`.
+- `runner.py`: `TimeBudget` and the action-budget setting.
 
 The other checkout `Multi-Agent-HR` was left untouched. Its renamed fixtures and rehearsal/documentation edits are represented in this newer branch; continue development in a single agreed checkout to avoid diverging copies. No credentials, virtual environment or local runtime logs are part of the handoff.

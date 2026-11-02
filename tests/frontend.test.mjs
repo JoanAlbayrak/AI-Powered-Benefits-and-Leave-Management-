@@ -318,3 +318,12 @@ test('the cost panel shows the vesting rule with its policy source, and nothing 
   assert.doesNotMatch(withRule, /<b>years<\/b>/);                         // escaped
   assert.doesNotMatch(employeeView({ page: 'benefits' }, { ...base, cost_summary: { ...summary, retirement_vesting: null } }), /vest/i);
 });
+
+test('a conflict response is marked stale so the page reloads the case; a plain rule error is not', async t => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ error: 'This case changed after you opened it.', stale: true }) });
+  await assert.rejects(api.decide('C2', 'approve', '', 1), error => error.stale === true && !error.outcomeUnknown);
+  globalThis.fetch = async () => ({ ok: true, json: async () => ({ error: 'A reason is required for this decision' }) });
+  await assert.rejects(api.decide('C2', 'deny', '', 1), error => error.stale === false);
+});

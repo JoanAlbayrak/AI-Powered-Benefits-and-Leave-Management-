@@ -1,8 +1,9 @@
 /** Same-origin requests. Mutations are explicit and never automatically retried. */
 export class ApiError extends Error {
-  constructor(message, outcomeUnknown = false) {
+  constructor(message, outcomeUnknown = false, stale = false) {
     super(message);
     this.outcomeUnknown = outcomeUnknown;
+    this.stale = stale;   // the case changed under the user: show the latest version
   }
 }
 
@@ -20,7 +21,7 @@ export async function request(path, body = {}, { signal, mutation = false, timeo
     if (!response.ok) throw new ApiError(mutation ? 'The server could not confirm this action. Refresh its status before trying again.' : 'We couldn’t load this workspace. Please try again.', mutation);
     const result = await response.json();
     // The existing backend returns workflow errors in successful HTTP responses.
-    if (result.error) throw new ApiError(result.error);
+    if (result.error) throw new ApiError(result.error, false, Boolean(result.stale));
     return result;
   } catch (error) {
     if (error instanceof ApiError) throw error;

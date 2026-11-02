@@ -2,7 +2,8 @@
 import unittest
 
 from benefits_leave import checks
-from benefits_leave.workflow import CaseStore, WorkflowError
+from benefits_leave.web import make_handler  # noqa: F401
+from benefits_leave.workflow import CaseStore, StaleReviewError, WorkflowError
 from tests.test_benefits_leave import FakeClient
 
 FAMILY = {"status": "elected", "plan": "Gold HMO", "tier": "family"}
@@ -54,6 +55,37 @@ class StaleApproval(unittest.TestCase):
         # opening the refreshed case and approving that revision works
         decided = self.store.hr_decide(self.case["id"], "approve", expected_revision=self.case["review_revision"])
         self.assertEqual(decided["status"], "approved")
+
+    def test_a_stale_decision_is_a_distinct_conflict_the_page_can_reload_from(self):
+        opened = self.case["review_revision"]
+        self.store.set_election("E2002", "dental", {"status": "waived"})
+        with self.assertRaises(StaleReviewError):
+            self.store.hr_decide(self.case["id"], "approve", expected_revision=opened)
+        with self.assertRaises(StaleReviewError):
+            self.store.hr_verify_document(self.case["id"], "EV-E2002-01", expected_revision=opened)
+        # an ordinary rule violation is NOT flagged stale: the page keeps the user's typed reason
+        with self.assertRaises(WorkflowError) as ctx:
+            self.store.hr_decide(self.case["id"], "deny", "")
+        self.assertNotIsInstance(ctx.exception, StaleReviewError)
+
+    def test_the_web_layer_marks_only_conflicts_as_stale(self):
+        import json as _json
+        from http.server import ThreadingHTTPServer
+        import threading, urllib.request
+        server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.store))
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.shutdown)
+
+        def post(body):
+            req = urllib.request.Request(f"http://127.0.0.1:{server.server_port}/api/hr/decide",
+                                         data=_json.dumps(body).encode(), headers={"Content-Type": "application/json"})
+            return _json.loads(urllib.request.urlopen(req).read())
+        opened = self.case["review_revision"]
+        self.store.set_election("E2002", "dental", {"status": "waived"})
+        stale = post({"case_id": self.case["id"], "decision": "approve", "review_revision": opened})
+        self.assertTrue(stale["stale"])
+        plain = post({"case_id": self.case["id"], "decision": "deny", "reason": ""})
+        self.assertNotIn("stale", plain)
 
     def test_the_frozen_handoff_matches_the_reviewed_selections(self):
         self.store.set_election("E2002", "medical", {"status": "elected", "plan": "Silver PPO", "tier": "employee"})

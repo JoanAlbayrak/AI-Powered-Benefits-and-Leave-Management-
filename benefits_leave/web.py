@@ -14,7 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-from benefits_leave.workflow import LEAVE_SCHEDULES, CaseStore, WorkflowError
+from benefits_leave.workflow import LEAVE_SCHEDULES, CaseStore, StaleReviewError, WorkflowError
 from benefits_leave import checks, runner
 from benefits_leave.agents import employee_safe_status
 from benefits_leave.hr_lookup import load_fake_hr_data, lookup_employee_leave_balance
@@ -294,6 +294,8 @@ def make_handler(store):
                     out = handle(store, self.path, body)
             except WorkflowError as exc:
                 out = {"error": str(exc)}
+                if isinstance(exc, StaleReviewError):
+                    out["stale"] = True      # the page reloads the case instead of asking the user to retry blind
             except (ValueError, json.JSONDecodeError):
                 out = {"error": "Bad request."}
             self._send(200, "application/json", json.dumps(out).encode())

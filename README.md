@@ -47,7 +47,7 @@ The Enrollment Agent also answers employee questions ("I already uploaded it") b
    ```bash
    .venv/bin/python -m benefits_leave.readiness --live
    ```
-   Optional `.env` settings: `ANTHROPIC_MODEL` (default `claude-opus-5-5`), `ANTHROPIC_EFFORT`, `ANTHROPIC_TIMEOUT_SECONDS`, `ANTHROPIC_MAX_RETRIES`, `BENEFITS_AI_DISABLED`. See `.env.example`.
+   Optional `.env` settings: `ANTHROPIC_MODEL` (default `claude-opus-5-5`), `ANTHROPIC_EFFORT`, `ANTHROPIC_TIMEOUT_SECONDS`, `ANTHROPIC_MAX_RETRIES`, `ANTHROPIC_ACTION_BUDGET_SECONDS` (one shared time budget per action, default 90 s), `BENEFITS_AI_DISABLED`. See `.env.example`.
 
 ## Running the demo page
 

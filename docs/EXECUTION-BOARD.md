@@ -1,5 +1,7 @@
 # Execution board
 
+**2 November (continuation) update:** the five tasks that blocked the interactive extension are done on `claude/jolly-edison-vkgp9d` (stale-approval fix, employee/HR privacy, document and correction transitions, grounding and a shared time budget, demo validation). They are verified offline and in a browser rehearsal against a scripted model (196 Python, 31 frontend tests, 37/37 rehearsal checks). **No live-model verification of the new paths has been done.** Details and limitations: [Joan handoff](JOAN-HANDOFF.md).
+
 **2 November update:** the original task stack is merged through PR #13 (and benefits integration through PR #4). The latest interactive extension is a separate work-in-progress branch. See [Joan handoff](JOAN-HANDOFF.md) for completed additions, reproduced blockers and remaining tasks. Historical status below describes the earlier checkpoint.
 
 **Status (1 November 2026): P1/P2 on `feat/connect-benefits-workflow`; P0 setup, P3–P6 and the P7 automated checks implemented on the T02–T08 task branches (see [implementation record](T02-T08-IMPLEMENTATION.md)).** Live rehearsal with the real key (P7/T09) passed on 2026-11-01. Feature PRs for T02–T08 and human review/merge remain open. Checked items describe implementation branches, not merges.
@@ -100,6 +102,18 @@ Checkpoint: one synthetic leave case goes from incomplete draft to HR review. A 
 - [x] Two clean-start rehearsals succeed using the actual key and chosen model. *(2026-11-01: readiness `--live` passed on claude-opus-5-5; two independent clean-start server instances both completed the enrollment check, Q&A, vendor mismatch + Vendor→Enrollment consultation, and leave draft→clarify→confirm→HR-approve journeys live with no errors.)*
 - [x] README and demo instructions reflect actual implemented behavior.
 - [ ] Feature PRs describe what changed, how it was checked and what remains limited.
+
+## Interactive extension (continuation work)
+
+Checked items are implemented and verified as stated in the [handoff](JOAN-HANDOFF.md); none is live-verified.
+
+- [x] **X1 Stale approval:** edits refresh the open review; approval revalidates against live data and the revision HR saw; conflicts reload the latest case. *(Regression-tested; shown to fail without the fix.)*
+- [x] **X2 Privacy:** one employee enrollment projection; no `hr_flags` or `enrollment_state` in employee responses; flag-copy guard on the employee message. *(Endpoint-walk test for E2003 and E1003.)*
+- [x] **X3 Transitions:** HR verifies received proof; pending leave documents requested → received → verified/asked again/withdrawn; same-case correction after an information request. *(Backend rules and UI; browser rehearsal.)*
+- [x] **X4 Grounding and limits:** consider and intake agents read the approved policy; `DEMO-LEAVE-BALANCES@v1` replaces the invented balance rule; vesting from plan data with its policy ref; shared per-action time budget (default 90 s, under the 120 s page timeout).
+- [x] **X5 Validation and docs:** browser rehearsal 37/37 with a scripted model; handoff, board and script updated.
+- [ ] **X6 Live rehearsal of the new paths with a working key** (election consideration, free-text leave intake, new policy tools, budget under real latency). Not done.
+- [ ] **X7 Review and merge** of the feature PR by a human. Not merged.
 
 ## Live presentation route
 
