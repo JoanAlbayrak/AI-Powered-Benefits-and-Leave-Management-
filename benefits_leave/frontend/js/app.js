@@ -26,7 +26,7 @@ function paintWorkflow() {
     : message ? notice(message.text, message.tone) : '';
   region.hidden = !region.innerHTML;
   document.querySelectorAll('[data-workflow-action]').forEach(button => { button.disabled = workflow.blocked || button.dataset.locked === 'true'; });
-  document.querySelectorAll('#hr-decision-form, #vendor-sent-form, #enrollment-help-form, #leave-draft-form, #leave-confirm-form').forEach(form => {
+  document.querySelectorAll('#hr-decision-form, #vendor-sent-form, #enrollment-help-form, #leave-draft-form, #leave-confirm-form, .workflow-form').forEach(form => {
     form.setAttribute('aria-busy', String(workflow.pending));
     form.querySelectorAll('select, textarea, input').forEach(input => { input.disabled = workflow.blocked; });
   });
@@ -98,6 +98,21 @@ function bindView() {
     if (note) { note.hidden = shown > 0; note.textContent = type ? 'No document is required for this leave type.' : 'Choose a leave type to see required documents.'; }
   };
   document.getElementById('leave-type')?.addEventListener('change', showDocs);
+  const intakeForm = document.getElementById('leave-intake-form');
+  intakeForm?.addEventListener('submit', event => {
+    event.preventDefault();
+    const description = document.getElementById('leave-description')?.value.trim();
+    if (!description) return;
+    const employeeId = state.employeeId;
+    performAction(() => api.leaveIntake(employeeId, description), 'The Leave Agent reviewed your description.');
+  });
+  document.getElementById('use-intake-suggestion')?.addEventListener('click', event => {
+    const select = document.getElementById('leave-type');
+    if (!select) return;
+    select.value = event.currentTarget.dataset.leaveType;
+    select.dispatchEvent(new Event('change'));
+    select.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
   leaveForm?.addEventListener('submit', event => {
     event.preventDefault();
     const form = new FormData(leaveForm);
@@ -116,6 +131,41 @@ function bindView() {
     const employeeId = state.employeeId;
     performAction(() => api.checkEnrollment(employeeId), 'Enrollment checked. Review the findings below; HR makes the decision.');
   });
+  document.querySelectorAll('.election-form').forEach(form => {
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      const benefit = form.dataset.benefit;
+      const intent = event.submitter?.dataset.intent || 'save';
+      const data = new FormData(form);
+      const status = data.get('status');
+      let fields;
+      if (benefit === 'retirement') {
+        fields = status === 'elected' ? { status, percent: Number(data.get('percent')) } : { status };
+      } else if (status === 'elected') {
+        const [plan, tier] = (data.get('plan_tier') || '').split('|');
+        fields = { status, plan, tier };
+      } else {
+        fields = { status };
+      }
+      const employeeId = state.employeeId;
+      if (intent === 'consider') {
+        performAction(() => api.considerElection(employeeId, benefit, fields), 'The Enrollment Agent reviewed this choice. Nothing was saved.');
+      } else {
+        performAction(() => api.electBenefit(employeeId, benefit, fields), 'Election saved.');
+      }
+    });
+  });
+  const dependentForm = document.getElementById('dependent-add-form');
+  dependentForm?.addEventListener('submit', event => {
+    event.preventDefault();
+    const data = new FormData(dependentForm);
+    const employeeId = state.employeeId;
+    performAction(() => api.addDependent(employeeId, data.get('relationship'), data.get('name')), 'Dependent added.');
+  });
+  document.querySelectorAll('[data-mark-uploaded]').forEach(button => button.addEventListener('click', () => {
+    const employeeId = state.employeeId;
+    performAction(() => api.markDocumentUploaded(employeeId, button.dataset.relationship, button.dataset.name), 'Marked as uploaded. It stays open until HR verifies it.');
+  }));
   const helpForm = document.getElementById('enrollment-help-form');
   document.querySelectorAll('[data-help-suggestion]').forEach(button => button.addEventListener('click', () => {
     const field = document.getElementById('help-question');

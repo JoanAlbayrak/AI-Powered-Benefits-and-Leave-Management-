@@ -142,5 +142,116 @@ class LeaveJourney(unittest.TestCase):
         self.assertEqual([s["id"] for s in mine["leave_schedules"]], ["continuous", "intermittent", "reduced"])
 
 
+def intake_answer(suggested_type="own_health", documents=("medical certification",)):
+    return {"suggested_leave_type": suggested_type, "reason": "Sounds like a medical situation.",
+            "documents_likely_needed": list(documents), "balance_note": "Sick leave fits better than PTO here.",
+            "follow_up_question": "About how many days do you expect to need?",
+            "policy_refs": ["DEMO-LEAVE-DOCUMENTS@v1"]}
+
+
+def intake_script(answer):
+    def script(request, results):
+        return read_all_then(request, results, answer)
+    return script
+
+
+class LeaveIntake(unittest.TestCase):
+    """T06-extension: a free-text description suggests a type/balance before any draft exists."""
+
+    def test_persisted_so_it_survives_the_overview_refetch(self):
+        store = CaseStore(client=ScriptedClient(intake_script(intake_answer())))
+        store.intake_leave("E1001", "I need surgery and will be out a while")
+        overview = handle(store, "/api/employee/overview", {"employee_id": "E1001"})
+        self.assertEqual(overview["intake_result"]["suggested_leave_type"], "own_health")
+
+    def test_grounded_suggestion_from_a_real_leave_type(self):
+        store = CaseStore(client=ScriptedClient(intake_script(intake_answer())))
+        result = handle(store, "/api/employee/leave/intake",
+                        {"employee_id": "E1001", "description": "I need surgery and will be out a while"})
+        self.assertEqual(result["suggested_leave_type"], "own_health")
+        self.assertIn("medical certification", result["documents_likely_needed"])
+        self.assertIn("Sick leave", result["balance_note"])
+
+    def test_creates_no_draft_and_no_case(self):
+        store = CaseStore(client=ScriptedClient(intake_script(intake_answer())))
+        cases_before = set(store.cases)   # CaseStore seeds one demo enrollment case at init
+        store.intake_leave("E1001", "I need surgery and will be out a while")
+        self.assertEqual(store.drafts, {})
+        self.assertEqual(set(store.cases), cases_before)
+
+    def test_fake_suggested_type_is_dropped(self):
+        store = CaseStore(client=ScriptedClient(intake_script(intake_answer(suggested_type="made_up_type"))))
+        result = store.intake_leave("E1001", "something vague")
+        self.assertIsNone(result["suggested_leave_type"])
+
+    def test_fake_policy_ref_is_dropped(self):
+        answer = {**intake_answer(), "policy_refs": ["DEMO-LEAVE-DOCUMENTS@v1", "FAKE-REF@v1"]}
+        store = CaseStore(client=ScriptedClient(intake_script(answer)))
+        result = store.intake_leave("E1001", "something vague")
+        self.assertEqual(result["policy_refs"], ["DEMO-LEAVE-DOCUMENTS@v1"])
+
+    def test_scope_and_input_limits(self):
+        store = CaseStore(client=ScriptedClient(intake_script(intake_answer())))
+        with self.assertRaises(WorkflowError):
+            store.intake_leave("E2001", "something")       # new hires use the benefits journey
+        with self.assertRaises(WorkflowError):
+            store.intake_leave("E1001", "")
+        with self.assertRaises(WorkflowError):
+            store.intake_leave("E1001", "x" * 1001)
+
+    def test_balance_lookup_failure_degrades_gracefully(self):
+        store = CaseStore(client=ScriptedClient(intake_script(intake_answer())), lookup=timeout_lookup)
+        result = store.intake_leave("E1001", "I need surgery and will be out a while")
+        self.assertIsNone(result["ai_error"])   # the suggestion still runs; it just has no real balances to cite
+
+
+class LeaveBalanceDisplay(unittest.TestCase):
+    """T06-extension: categorized balances shown to the employee, never fabricated."""
+
+    def test_balance_surfaces_for_a_normal_employee(self):
+        store = CaseStore(client=ScriptedClient(intake_script(intake_answer())))
+        overview = handle(store, "/api/employee/overview", {"employee_id": "E1001"})
+        self.assertEqual(overview["leave_balance"]["status"], "ok")
+        self.assertEqual(overview["leave_balance"]["balances"], {"pto": 96, "sick": 40, "personal": 16})
+
+    def test_bad_balance_data_is_cannot_determine_not_a_crash(self):
+        store = CaseStore(client=ScriptedClient(intake_script(intake_answer())))
+        overview = handle(store, "/api/employee/overview", {"employee_id": "E1004"})
+        self.assertEqual(overview["leave_balance"]["status"], "cannot_determine")
+
+    def test_missing_balance_data_is_cannot_determine_not_a_crash(self):
+        store = CaseStore(client=ScriptedClient(intake_script(intake_answer())))
+        overview = handle(store, "/api/employee/overview", {"employee_id": "E1005"})
+        self.assertEqual(overview["leave_balance"]["status"], "cannot_determine")
+
+    def test_new_hires_have_no_leave_balance_field(self):
+        store = CaseStore(client=ScriptedClient(intake_script(intake_answer())))
+        overview = handle(store, "/api/employee/overview", {"employee_id": "E2001"})
+        self.assertIsNone(overview["leave_balance"])
+
+
+class ConditionalApproval(unittest.TestCase):
+    """T06-extension: 'approved, pending documents' -- distinct from approve/deny/request_info."""
+
+    def setUp(self):
+        self.store = CaseStore(client=ScriptedClient(leave_script))
+        draft = handle(self.store, "/api/employee/leave/draft", {"employee_id": "E1001", **FULL})["draft"]
+        _, self.case, _ = self.store.confirm_leave_draft("E1001", draft["id"], True)
+
+    def test_approved_pending_documents_requires_a_reason(self):
+        with self.assertRaises(WorkflowError):
+            self.store.hr_decide(self.case["id"], "approved_pending_documents", "")
+
+    def test_approved_pending_documents_records_the_right_status_and_message(self):
+        decided = self.store.hr_decide(self.case["id"], "approved_pending_documents", "a signed doctor's note")
+        self.assertEqual(decided["status"], "approved_pending_documents")
+        self.assertIn("approved", decided["employee_update"].lower())
+        self.assertIn("signed doctor's note", decided["employee_update"])
+
+    def test_approved_pending_documents_is_leave_only(self):
+        with self.assertRaises(WorkflowError):
+            self.store.hr_decide("C1", "approved_pending_documents", "a document")   # C1 is the seeded enrollment case
+
+
 if __name__ == "__main__":
     unittest.main()

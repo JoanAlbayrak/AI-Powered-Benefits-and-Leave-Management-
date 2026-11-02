@@ -12,6 +12,8 @@ ANSWERS = {
     "submit_enrollment_guidance": {"employee_message": "Here's what's left.", "hr_summary": "Summary for HR."},
     "submit_leave_summary": {"employee_message": "We received your request.", "hr_summary": "Leave summary."},
     "submit_vendor_summary": {"hr_summary": "Vendor summary.", "follow_ups": []},
+    "submit_consideration": {"explanation": "This is what that choice would mean.",
+                             "evidence_refs": [], "policy_refs": []},
 }
 
 
@@ -305,6 +307,90 @@ class Handoff(unittest.TestCase):
         store.get("C1")["handoff"] = None
         with self.assertRaises(WorkflowError):
             store.check_vendor_confirmations("C1")
+
+
+class InteractiveElections(unittest.TestCase):
+    """The employee actually chooses their elections; code validates everything, the agent never does."""
+
+    def test_valid_election_updates_status(self):
+        store = CaseStore(client=FakeClient())
+        status = store.set_election("E2002", "dental", {"status": "elected", "plan": "Plus Dental", "tier": "employee"})
+        self.assertTrue(any("Dental: Plus Dental" in d for d in status["done"]))
+
+    def test_invalid_plan_is_rejected(self):
+        store = CaseStore(client=FakeClient())
+        with self.assertRaises(WorkflowError):
+            store.set_election("E2002", "dental", {"status": "elected", "plan": "Nope", "tier": "employee"})
+
+    def test_invalid_tier_is_rejected(self):
+        store = CaseStore(client=FakeClient())
+        with self.assertRaises(WorkflowError):
+            store.set_election("E2002", "dental", {"status": "elected", "plan": "Plus Dental", "tier": "nope"})
+
+    def test_invalid_retirement_percent_is_rejected(self):
+        store = CaseStore(client=FakeClient())
+        with self.assertRaises(WorkflowError):
+            store.set_election("E2002", "retirement", {"status": "elected", "percent": 7})
+
+    def test_retirement_cannot_be_waived(self):
+        store = CaseStore(client=FakeClient())
+        with self.assertRaises(WorkflowError):
+            store.set_election("E2002", "retirement", {"status": "waived"})
+
+    def test_waiving_a_benefit_is_allowed(self):
+        store = CaseStore(client=FakeClient())
+        status = store.set_election("E2002", "vision", {"status": "waived"})
+        self.assertTrue(any("Vision: waived" in d for d in status["done"]))
+
+    def test_election_locked_after_hr_decides(self):
+        store = CaseStore(client=FakeClient())
+        with self.assertRaises(WorkflowError):
+            store.set_election("E2004", "vision", {"status": "waived"})   # E2004 is the seeded, decided case
+
+    def test_consider_election_never_mutates_state(self):
+        store = CaseStore(client=FakeClient())
+        before = copy.deepcopy(store.data["new_hires"]["E2002"]["elections"])
+        result = store.consider_election("E2002", "medical", {"status": "elected", "plan": "Gold HMO", "tier": "family"})
+        self.assertEqual(store.data["new_hires"]["E2002"]["elections"], before)
+        self.assertEqual(result["explanation"], "This is what that choice would mean.")
+        # persisted so it survives the overview page's refetch-and-rerender cycle
+        self.assertEqual(store.consider_results["E2002"]["medical"]["explanation"], result["explanation"])
+
+    def test_consider_election_locked_after_hr_decides(self):
+        store = CaseStore(client=FakeClient())
+        with self.assertRaises(WorkflowError):
+            store.consider_election("E2004", "medical", {"status": "elected", "plan": "Gold HMO", "tier": "employee"})
+
+    def test_add_dependent_then_mark_uploaded_clears_the_right_state(self):
+        store = CaseStore(client=FakeClient())
+        store.set_election("E2002", "medical", {"status": "elected", "plan": "Gold HMO", "tier": "employee_spouse"})
+        store.add_dependent("E2002", "spouse", "Jordan Alvarez")
+        status = checks.enrollment_status("E2002", store.data)
+        self.assertIn("Upload marriage certificate for Jordan Alvarez", status["missing"])
+        evidence = store.mark_document_uploaded("E2002", "spouse", "Jordan Alvarez")
+        self.assertEqual(evidence[0]["state"], "received")
+        # received, not verified: HR hasn't acted, so the item is still open
+        status = checks.enrollment_status("E2002", store.data)
+        self.assertIn("Upload marriage certificate for Jordan Alvarez", status["missing"])
+
+    def test_cannot_mark_the_same_document_uploaded_twice(self):
+        store = CaseStore(client=FakeClient())
+        store.add_dependent("E2002", "spouse", "Jordan Alvarez")
+        store.mark_document_uploaded("E2002", "spouse", "Jordan Alvarez")
+        with self.assertRaises(WorkflowError):
+            store.mark_document_uploaded("E2002", "spouse", "Jordan Alvarez")
+
+    def test_add_dependent_locked_after_hr_decides(self):
+        store = CaseStore(client=FakeClient())
+        with self.assertRaises(WorkflowError):
+            store.add_dependent("E2004", "spouse", "Someone New")
+
+    def test_cost_summary_splits_employee_and_employer_shares(self):
+        store = CaseStore(client=FakeClient())
+        store.set_election("E2002", "medical", {"status": "elected", "plan": "Silver PPO", "tier": "employee"})
+        summary = store.enrollment_cost_summary("E2002")
+        self.assertGreater(summary["employee_per_paycheck"], 0)
+        self.assertGreater(summary["employer_per_paycheck"], summary["employee_per_paycheck"])
 
 
 class WebHandle(unittest.TestCase):

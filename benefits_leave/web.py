@@ -16,7 +16,7 @@ from urllib.parse import unquote, urlsplit
 
 from benefits_leave.workflow import LEAVE_SCHEDULES, CaseStore, WorkflowError
 from benefits_leave import checks, runner
-from benefits_leave.hr_lookup import load_fake_hr_data
+from benefits_leave.hr_lookup import load_fake_hr_data, lookup_employee_leave_balance
 
 PAGE = (Path(__file__).resolve().parent / "web_page.html").read_bytes()
 FRONTEND = Path(__file__).resolve().parent / "frontend"
@@ -80,6 +80,59 @@ def _employee_turn(turn):
     return {k: v for k, v in turn.items() if k != "dropped_refs"}
 
 
+def employee_selections(store, employee_id):
+    """Each benefit's current election, for display or as the starting point for an edit.
+
+    Shared by the read-only overview and every mutating election endpoint, so there's one
+    place that defines what a 'selection' looks like.
+    """
+    hire = store.data["new_hires"].get(employee_id)
+    if hire is None:
+        return []
+    selections = []
+    for benefit in (*store.data["rules"]["benefit_types"], "retirement"):
+        election = hire["elections"].get(benefit, {"status": "not_started"})
+        selection = {"benefit": benefit, "status": election["status"]}
+        if benefit == "retirement":
+            selection["percent"] = election.get("percent")
+        else:
+            selection.update(plan=election.get("plan"), tier=election.get("tier"))
+            selection["cost_per_paycheck"] = store.data["plans"][benefit].get(election.get("plan"), {}).get(election.get("tier"))
+        selections.append(selection)
+    return selections
+
+
+def employee_dependents(store, employee_id):
+    """Each dependent with its document state, regardless of which tier is currently elected.
+
+    `checks.evidence_status` is tier-gated (only reports what the *current* election needs);
+    this is the raw view, so the UI can show upload state for a dependent added before a
+    dependent-covering tier is chosen.
+    """
+    hire = store.data["new_hires"].get(employee_id)
+    if hire is None:
+        return []
+    records = checks.evidence_for(employee_id, store.data)
+    out = []
+    for dependent in hire["dependents"]:
+        requirement = store.data["rules"]["dependent_proof"][dependent["relationship"]]
+        match = next((r for r in records if r["requirement"] == requirement and r["dependent"] == dependent["name"]), None)
+        out.append({**dependent, "requirement": requirement, "document_state": (match or {}).get("state", "absent")})
+    return out
+
+
+def employee_leave_balance(store, employee_id):
+    """Categorized leave balances (pto/sick/personal), or a graceful 'cannot determine'.
+
+    Never fabricates a number -- mirrors the FMLA pre-check's own honesty rule.
+    """
+    lookup = store.lookup or lookup_employee_leave_balance
+    result = lookup(employee_id)
+    if result["status"] != "ok":
+        return {"status": "cannot_determine", "reason": result.get("reason")}
+    return {"status": "ok", "balances": result["facts"]["leave_balances"]["value"], "as_of": result["as_of"]}
+
+
 def employee_overview(store, employee_id):
     """Read-only UI model: existing checks, no agent calls or case creation.
 
@@ -90,27 +143,26 @@ def employee_overview(store, employee_id):
     if person is None:
         raise WorkflowError("Employee not found")
     enrollment = None
-    selections = []
-    if person["kind"] == "new hire":
+    is_new_hire = person["kind"] == "new hire"
+    if is_new_hire:
         result = checks.enrollment_status(employee_id, store.data)
         # Keep eligibility flags and internal completion classifications HR-only.
         enrollment = {k: result[k] for k in ("name", "deadline", "days_left", "done", "missing", "notes", "as_of")}
-        hire = store.data["new_hires"][employee_id]
-        for benefit in (*store.data["rules"]["benefit_types"], "retirement"):
-            election = hire["elections"].get(benefit, {"status": "not_started"})
-            selection = {"benefit": benefit, "status": election["status"]}
-            if benefit == "retirement":
-                selection["percent"] = election.get("percent")
-            else:
-                selection.update(plan=election.get("plan"), tier=election.get("tier"))
-                selection["cost_per_paycheck"] = store.data["plans"][benefit].get(election.get("plan"), {}).get(election.get("tier"))
-            selections.append(selection)
-    return {"employee": person, "enrollment": enrollment, "selections": selections,
+    hire = store.data["new_hires"].get(employee_id)
+    return {"employee": person, "enrollment": enrollment,
+            "selections": employee_selections(store, employee_id),
+            "dependents": employee_dependents(store, employee_id),
+            "enrollment_locked": store.enrollment_locked(employee_id) if is_new_hire else None,
+            "cost_summary": store.enrollment_cost_summary(employee_id) if is_new_hire else None,
+            "plan_options": checks.plan_options(store.data) if is_new_hire else None,
+            "consider_results": store.consider_results.get(employee_id, {}),
             "evidence": checks.evidence_status(employee_id, store.data) if enrollment else [],
             "help_thread": [_employee_turn(t) for t in store.help_threads.get(employee_id, [])],
             "leave_drafts": [draft_view(d) for d in store.drafts.values() if d["employee_id"] == employee_id],
             "leave_schedules": [{"id": k, "label": v} for k, v in LEAVE_SCHEDULES.items()],
             "cases": [employee_view(c) for c in store.employee_cases(employee_id)],
+            "leave_balance": employee_leave_balance(store, employee_id) if not is_new_hire else None,
+            "intake_result": store.intake_results.get(employee_id),
             "as_of": store.data["as_of"],
             "retirement_match": store.data["retirement_plan"]["match_rule"],
             "leave_types": [{"id": key, "label": value["label"], "required_documents": value["required_documents"]}
@@ -136,6 +188,22 @@ def handle(store, path, body):
         turn = store.enrollment_help(eid, body.get("question", ""))
         return {"turn": _employee_turn(turn),
                 "thread": [_employee_turn(t) for t in store.help_threads.get(eid, [])]}
+    if path == "/api/employee/enrollment/elect":
+        election_fields = {k: body.get(k) for k in ("status", "plan", "tier", "percent")}
+        status = store.set_election(eid, body.get("benefit", ""), election_fields)
+        return {"enrollment": {k: status[k] for k in ("done", "missing", "hr_flags", "notes")},
+                "selections": employee_selections(store, eid), "cost_summary": store.enrollment_cost_summary(eid)}
+    if path == "/api/employee/enrollment/consider":
+        election_fields = {k: body.get(k) for k in ("status", "plan", "tier", "percent")}
+        return store.consider_election(eid, body.get("benefit", ""), election_fields)
+    if path == "/api/employee/enrollment/dependent/add":
+        store.add_dependent(eid, body.get("relationship", ""), body.get("name", ""))
+        return {"dependents": employee_dependents(store, eid), "selections": employee_selections(store, eid)}
+    if path == "/api/employee/enrollment/dependent/upload":
+        store.mark_document_uploaded(eid, body.get("relationship", ""), body.get("name", ""))
+        return {"dependents": employee_dependents(store, eid), "selections": employee_selections(store, eid)}
+    if path == "/api/employee/leave/intake":
+        return store.intake_leave(eid, body.get("description", ""))
     if path == "/api/employee/leave":
         request = {k: body.get(k) for k in ("employee_id", "leave_type", "start_date", "end_date", "reason")}
         request["documents_attached"] = body.get("documents_attached") or []

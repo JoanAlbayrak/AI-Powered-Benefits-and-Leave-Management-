@@ -40,6 +40,7 @@ const statuses = {
   info_requested: ['More information requested', 'warning', 'info'], vendor_records_ready: ['Vendor records prepared', '', 'document'],
   sent_to_vendors: ['Marked sent to vendors', '', 'external'], vendor_follow_up: ['Vendor follow-up needed', 'warning', 'clock'],
   vendor_confirmed: ['Vendor confirmed', 'success', 'check'],
+  approved_pending_documents: ['Approved, pending a document', 'warning', 'check'],
 };
 export const statusBadge = status => badge(...(statuses[status] || [label(status), 'neutral']));
 export const buttonLink = (text, href, { primary = false, symbol = null } = {}) => `<a class="btn ${primary ? 'primary' : ''}" href="${escape(href)}">${escape(text)}${symbol ? icon(symbol) : ''}</a>`;

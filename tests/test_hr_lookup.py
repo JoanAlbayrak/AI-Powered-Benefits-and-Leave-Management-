@@ -9,8 +9,8 @@ class RealZeroIsNotAnError(unittest.TestCase):
     def test_zero_balance_is_ok(self):
         result = lookup("E1002")
         self.assertEqual(result["status"], "ok")
-        self.assertEqual(result["facts"]["leave_balance"]["value"], 0)
-        self.assertEqual(result["facts"]["leave_balance"]["units"], "hours")
+        self.assertEqual(result["facts"]["leave_balances"]["value"], {"pto": 0, "sick": 0, "personal": 0})
+        self.assertEqual(result["facts"]["leave_balances"]["units"], "hours")
         self.assertIn("as_of", result)
 
     def test_normal_employee(self):
