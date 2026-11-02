@@ -34,7 +34,7 @@ export function vendorActions(item) {
 export function vendorDrafts(item) {
   const result = item.vendor;
   if (!result?.reconciliation) return '';
-  return `<div class="spaced">${panel('Follow-up drafts for HR', `<div class="panel-body">${result.ai_error ? notice(`AI explanation unavailable: ${result.ai_error} The comparison and rule-based draft templates are still available.`, 'warning') : ''}${result.follow_ups?.length ? result.follow_ups.map(draft => `<article class="draft spaced"><h3>${escape(draft.vendor)}</h3><p class="inline-note">${escape(draft.issue)}</p><p class="generated-text spaced">${escape(draft.draft_message)}</p><p class="inline-note spaced">Draft only · HR reviews and sends through its own channel.</p></article>`).join('') : '<p>No follow-up drafts are needed for these results.</p>'}</div>`)}</div>`;
+  return `<div class="spaced">${panel('Follow-up drafts for HR', `<div class="panel-body">${result.ai_error ? notice(`AI explanation unavailable: ${result.ai_error} The comparison and rule-based draft templates are still available.`, 'warning') : ''}${result.follow_ups?.length ? result.follow_ups.map(draft => `<article class="draft spaced"><h3>${escape(draft.vendor)}</h3><p class="inline-note">${escape(draft.issue)}</p><p class="generated-text spaced">${escape(draft.draft_message)}</p>${refChips(draft.evidence_refs)}<p class="inline-note spaced">Draft only · HR reviews and sends through its own channel.</p></article>`).join('') : '<p>No follow-up drafts are needed for these results.</p>'}</div>`)}</div>`;
 }
 
 const evidenceBadge = state => badge({ absent: 'Not on record', received: 'Received · awaiting HR check', verified: 'Verified by HR' }[state] || label(state), { absent: 'warning', received: '', verified: 'success' }[state] || 'neutral', { absent: 'warning', received: 'clock', verified: 'check' }[state]);
@@ -55,4 +55,20 @@ export const HELP_SUGGESTIONS = ['I already uploaded my document. Why is it stil
 export function enrollmentHelp(data) {
   const thread = data.help_thread || [];
   return panel('Ask the Enrollment Agent', `<div class="panel-body"><p>Ask about your own enrollment. The agent looks up your document records and the approved demo policy before answering. Asking does not change your case, notify HR or approve anything.</p>${thread.length ? `<div class="help-thread spaced">${thread.map(helpTurn).join('')}</div>` : ''}<form id="enrollment-help-form" class="spaced"><div class="form-field"><label for="help-question">Your question</label><textarea id="help-question" maxlength="600" required placeholder="For example: I already uploaded my marriage certificate."></textarea></div><div class="chip-row" aria-label="Example questions">${HELP_SUGGESTIONS.map(text => `<button type="button" class="chip" data-help-suggestion="${escape(text)}">${escape(text)}</button>`).join('')}</div><div class="actions spaced"><button class="btn primary" type="submit" data-workflow-action="help">${icon('bot')}Ask the Enrollment Agent</button></div></form></div>`, 'Answers cite the records they used.');
+}
+
+const ACTORS = { employee: ['Employee', 'employee'], code: ['Workflow code', 'code'], hr: ['HR', 'hr'], enrollment_agent: ['Enrollment Agent', 'agent'], vendor_agent: ['Vendor Agent', 'agent'], leave_agent: ['Leave Agent', 'agent'] };
+
+export function activityPanel(activity, title = 'Agent activity') {
+  if (!activity?.length) return '';
+  return panel(title, `<div class="panel-body"><div class="activity-list">${activity.map(item => {
+    const [name, kind] = ACTORS[item.actor] || [label(item.actor), 'code'];
+    const consult = /Enrollment Agent about|Answered the Vendor Agent|Consultation unavailable/.test(item.action);
+    return `<div class="activity-item ${kind}${consult ? ' consult' : ''}"><span class="activity-step" aria-hidden="true">${escape(item.step)}</span><div><span class="activity-actor">${kind === 'agent' ? icon('bot') : ''}${escape(name)}${item.visibility === 'hr' ? ' · HR only' : ''}</span><p><b>${escape(item.action)}</b></p>${item.finding ? `<p class="${kind === 'agent' ? 'generated-text' : ''}">${escape(item.finding)}</p>` : ''}${refChips(item.evidence_refs)}${item.unknowns?.length ? `<p class="inline-note">Unknown: ${escape(item.unknowns.join('; '))}</p>` : ''}${item.next_step ? `<p class="activity-next">Next: ${escape(item.next_step)}</p>` : ''}</div></div>`;
+  }).join('')}</div></div>`, 'Who acted, what they found, the records used and what happens next.');
+}
+
+export function consultationPanel(consultations) {
+  if (!consultations?.length) return '';
+  return panel('Specialist consultation', `<div class="panel-body">${consultations.map(c => `<article class="consult-box spaced"><p><b>${icon('bot')} Vendor Agent → Enrollment Agent</b> · ${escape(c.request_id)} · ${escape(label(c.benefit))}</p><p class="inline-note">Asked: ${escape(c.question)}</p><p>${badge(c.reply.status === 'answered' ? 'Answered' : 'Unavailable', c.reply.status === 'answered' ? 'success' : 'warning')}</p>${c.reply.finding ? `<p class="generated-text">${escape(c.reply.finding)}</p>` : ''}${refChips(c.reply.evidence_refs)}${c.reply.unknowns?.length ? `<p class="inline-note">Unknown: ${escape(c.reply.unknowns.join('; '))}</p>` : ''}${c.reply.proposed_next_action ? `<p class="activity-next">Proposed: ${escape(c.reply.proposed_next_action)}</p>` : ''}<p class="inline-note">Checked against snapshot ${escape(c.approved_snapshot_ref)} · ${escape(c.model_calls)} model call${c.model_calls === 1 ? '' : 's'}</p></article>`).join('')}</div>`, 'Routed and limited by workflow code: one consultation per vendor check.');
 }
