@@ -1,5 +1,5 @@
 import { icon, escape, label, coverageTier, formatDate, money, badge, statusBadge, buttonLink, emptyState, notice, panel, pageHeader, agentInfo, stageNote, disabledAction, caseName } from '../components.js';
-import { enrollmentActions, enrollmentGuidance, documentStatus, enrollmentHelp, refChips, activityPanel } from '../workflow-ui.js';
+import { enrollmentActions, enrollmentGuidance, documentStatus, enrollmentHelp, refChips, activityPanel, requestedDocumentsPanel, leaveResubmitForm } from '../workflow-ui.js';
 const selections = data => data.selections || [];
 const benefitIcon = benefit => ({ medical: 'heart', dental: 'shield', vision: 'eye', retirement: 'savings' }[benefit] || 'shield');
 
@@ -170,8 +170,11 @@ function caseDetail(data, caseId) {
   return back + pageHeader(caseName(item), 'Your request status and the latest employee-visible update.', item.id)
     + panel('Request status', `<div class="panel-body">${statusBadge(item.status)}<p class="spaced">${escape(item.employee_update || 'There is no employee update recorded yet.')}</p>${item.dates ? `<dl class="definition spaced"><div><dt>Start date</dt><dd>${formatDate(item.dates[0])}</dd></div><div><dt>End date</dt><dd>${formatDate(item.dates[1])}</dd></div></dl>` : ''}</div>`)
     + (item.kind === 'enrollment' ? `<div class="spaced">${enrollmentGuidance(item)}</div>` : leaveGuidance(item))
+    + (item.kind === 'leave' && item.pending_documents?.length ? `<div class="spaced">${requestedDocumentsPanel(item)}</div>` : '')
+    + (item.kind === 'leave' && item.status === 'info_requested' ? `<div class="spaced">${leaveResubmitForm(item, data)}</div>` : '')
+    + (item.kind === 'enrollment' && item.status === 'info_requested' ? `<div class="spaced">${panel('HR asked for more information', `<div class="panel-body"><p>Update your elections, dependents or documents, then recheck your enrollment. Rechecking sends the same case back to HR.</p><div class="actions spaced">${buttonLink('Update my enrollment', '#/employee/benefits', { primary: true, symbol: 'arrow' })}</div></div>`)}</div>` : '')
     + (item.activity?.length ? `<div class="spaced">${activityPanel(item.activity, 'What happened on your request')}</div>` : '')
-    + `<div class="spaced">${stageNote('Correcting a submitted request is not available in this demo. Internal HR notes are not included in this employee view.')}</div>`;
+    + `<div class="spaced">${stageNote('You can correct a request only after HR asks for more information. Internal HR notes are not included in this employee view.')}</div>`;
 }
 
 export function employeeView(route, data) {

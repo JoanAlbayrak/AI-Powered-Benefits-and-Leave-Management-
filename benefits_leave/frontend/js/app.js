@@ -26,7 +26,7 @@ function paintWorkflow() {
     : message ? notice(message.text, message.tone) : '';
   region.hidden = !region.innerHTML;
   document.querySelectorAll('[data-workflow-action]').forEach(button => { button.disabled = workflow.blocked || button.dataset.locked === 'true'; });
-  document.querySelectorAll('#hr-decision-form, #vendor-sent-form, #enrollment-help-form, #leave-draft-form, #leave-confirm-form, .workflow-form').forEach(form => {
+  document.querySelectorAll('#hr-decision-form, #vendor-sent-form, #enrollment-help-form, #leave-draft-form, #leave-confirm-form, #leave-resubmit-form, #doc-resolution-form, .workflow-form').forEach(form => {
     form.setAttribute('aria-busy', String(workflow.pending));
     form.querySelectorAll('select, textarea, input').forEach(input => { input.disabled = workflow.blocked; });
   });
@@ -199,6 +199,35 @@ function bindView() {
     const revision = decisionForm.dataset.reviewRevision === '' ? undefined : Number(decisionForm.dataset.reviewRevision);
     performAction(() => api.decide(id, selected, reason, revision), 'HR decision recorded.');
   });
+  document.querySelectorAll('[data-workflow-action="verify-document"]').forEach(button => button.addEventListener('click', () => {
+    const revision = button.dataset.reviewRevision === '' ? undefined : Number(button.dataset.reviewRevision);
+    performAction(() => api.verifyDocument(button.dataset.caseId, button.dataset.evidenceRef, revision), 'Document marked verified by HR.');
+  }));
+  const resolutionForm = document.getElementById('doc-resolution-form');
+  resolutionForm?.addEventListener('submit', event => {
+    event.preventDefault();
+    const resolution = document.getElementById('doc-resolution').value;
+    const reason = document.getElementById('doc-reason').value.trim();
+    if (resolution !== 'verify_documents' && !reason) {
+      feedback.set(contextKey(), { text: 'Add a reason for this step.', tone: 'error' });
+      paintWorkflow();
+      document.getElementById('doc-reason').focus();
+      return;
+    }
+    performAction(() => api.resolveLeaveDocuments(resolutionForm.dataset.caseId, resolution, reason), 'Document step recorded.');
+  });
+  document.querySelectorAll('[data-workflow-action="provide-document"]').forEach(button => button.addEventListener('click', () => {
+    const employeeId = state.employeeId;
+    performAction(() => api.provideLeaveDocument(employeeId, button.dataset.caseId, button.dataset.document), 'Marked as provided. HR will check it; it is not verified yet.');
+  }));
+  const resubmitForm = document.getElementById('leave-resubmit-form');
+  resubmitForm?.addEventListener('submit', event => {
+    event.preventDefault();
+    const form = new FormData(resubmitForm);
+    const fields = { leave_type: form.get('leave_type'), start_date: form.get('start_date'), end_date: form.get('end_date'), schedule: form.get('schedule'), reason: form.get('reason'), documents_attached: form.getAll('documents') };
+    const employeeId = state.employeeId;
+    performAction(() => api.resubmitLeave(employeeId, resubmitForm.dataset.caseId, fields), 'Your corrected request was sent back to HR. It is not approved yet.');
+  });
   document.querySelector('[data-workflow-action="prepare"]')?.addEventListener('click', event => {
     const id = event.currentTarget.dataset.caseId;
     performAction(() => api.prepareVendor(id), 'Vendor records prepared from the approved handoff. Nothing was sent.');
@@ -219,7 +248,7 @@ function bindView() {
     const query = document.getElementById('case-search')?.value.trim().toLowerCase() || '';
     let visible = 0;
     rows.forEach(row => {
-      const matchesFilter = filter === 'all' || (filter === 'review' ? ['incomplete', 'ready_for_hr_review', 'info_requested'].includes(row.dataset.status) : ['approved', 'vendor_records_ready', 'sent_to_vendors', 'vendor_follow_up', 'vendor_confirmed'].includes(row.dataset.status));
+      const matchesFilter = filter === 'all' || (filter === 'review' ? ['incomplete', 'ready_for_hr_review', 'info_requested', 'approved_documents_received'].includes(row.dataset.status) : ['approved', 'vendor_records_ready', 'sent_to_vendors', 'vendor_follow_up', 'vendor_confirmed'].includes(row.dataset.status));
       const matches = matchesFilter && row.dataset.search.includes(query);
       row.hidden = !matches;
       if (matches) visible++;

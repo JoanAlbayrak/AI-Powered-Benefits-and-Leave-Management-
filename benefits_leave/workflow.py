@@ -27,6 +27,7 @@ NON_TIER_PLAN_FIELDS = {"description", "network", "deductible", "total_premium"}
 MAX_NAME_CHARS = 80
 DEPENDENT_RELATIONSHIPS = {"spouse", "child"}
 OPEN_ENROLLMENT_STATUSES = ("incomplete", "ready_for_hr_review", "info_requested")
+DOCUMENT_RESOLUTIONS = {"verify_documents", "request_again", "withdraw_approval"}
 
 
 class WorkflowError(Exception):
@@ -96,8 +97,11 @@ class CaseStore:
         """
         employee_id = case["employee_id"]
         status = checks.enrollment_status(employee_id, self.data)
+        # While HR is waiting on the employee, edits don't silently put the case back in HR's queue:
+        # only the employee's explicit resubmission (check_enrollment) does.
+        waiting = case["status"] == "info_requested"
         case.update(enrollment=status, evidence=checks.evidence_status(employee_id, self.data),
-                    status="incomplete" if status["missing"] else "ready_for_hr_review",
+                    status="info_requested" if waiting else ("incomplete" if status["missing"] else "ready_for_hr_review"),
                     ai=None, ai_error=None)
         self._stamp_review(case, stale_ai=True)
         missing = len(status["missing"])
@@ -142,6 +146,11 @@ class CaseStore:
             raise WorkflowError("No enrollment found for this employee")
         new_status = "incomplete" if status["missing"] else "ready_for_hr_review"
         evidence = checks.evidence_status(employee_id, self.data)
+        resubmitting = bool(case and case["status"] == "info_requested")
+        if resubmitting:
+            case.setdefault("decision_history", []).append(case.pop("decision", {"decision": "request_info"}))
+            case["resubmissions"] = case.get("resubmissions", 0) + 1
+            case["employee_update"] = "Thanks. Your updated enrollment is back with HR for review."
         if case is None:
             case = self._new_case("enrollment", employee_id, status=new_status, enrollment=status,
                                   ai=result["ai"], ai_error=result["ai_error"], evidence=evidence)
@@ -158,6 +167,10 @@ class CaseStore:
                        evidence_refs=[e["evidence_ref"] for e in evidence if e["evidence_ref"]],
                        next_step="Employee completes the missing items" if missing else "HR reviews the case",
                        visibility="employee")
+        if resubmitting:
+            self._activity(case, "employee", "Resubmitted the enrollment after HR asked for information",
+                           f"Resubmission {case['resubmissions']}", next_step="HR reviews the updated case",
+                           visibility="employee")
         if status["hr_flags"]:
             self._activity(case, "code", "Flagged items for HR review", "; ".join(status["hr_flags"]),
                            next_step="HR decides whether an exception applies")
@@ -292,6 +305,45 @@ class CaseStore:
             "channel": "employee portal upload", "verified_by": None, "verified_on": None})
         self._refresh_after_edit(employee_id, "dependent document marked received")
         return checks.evidence_status(employee_id, self.data)
+
+    def hr_verify_document(self, case_id, evidence_ref, expected_revision=None):
+        """HR checks a received dependent document. 'Received' (employee uploaded) is not 'verified' (HR checked).
+
+        Only HR calls this (an /api/hr route); the employee upload path can never set verified. Only the
+        record that belongs to this case's employee can be verified, and only while the case is open.
+        """
+        case = self.get(case_id)
+        if case["kind"] != "enrollment":
+            raise WorkflowError("Dependent proof is verified on enrollment cases")
+        if case["status"] not in OPEN_ENROLLMENT_STATUSES:
+            raise WorkflowError(f"This case is already {case['status'].replace('_', ' ')}; "
+                                f"documents can't be verified after the decision")
+        if expected_revision is not None and expected_revision != case.get("review_revision"):
+            raise WorkflowError("This case changed after you opened it. Reload it and review the updated version.")
+        employee_id = case["employee_id"]
+        record = next((e for e in self.data.get("evidence", {}).get(employee_id, [])
+                       if e["id"] == evidence_ref and e.get("employee_id") == employee_id), None)
+        if record is None:
+            raise WorkflowError("That document is not on this employee's record")
+        if record["state"] == "verified":
+            raise WorkflowError(f"{record['requirement'].capitalize()} for {record['dependent']} is already verified")
+        if record["state"] != "received":
+            raise WorkflowError("Only a received document can be verified")
+        relationship = next(rel for rel, requirement in self.data["rules"]["dependent_proof"].items()
+                            if requirement == record["requirement"])
+        dependent = next((d for d in self.data["new_hires"][employee_id]["dependents"]
+                          if d["relationship"] == relationship and d["name"] == record["dependent"]), None)
+        if dependent is None:
+            raise WorkflowError("The dependent for this document is no longer on the enrollment")
+        record.update(state="verified", verified_by="HR specialist (demo)", verified_on=self.data["as_of"])
+        dependent["proof_received"] = True
+        self._refresh_enrollment_review(case, f"HR verified {record['requirement']} for {record['dependent']}")
+        self._activity(case, "hr", f"Verified the {record['requirement']} for {record['dependent']}",
+                       f"Received {record['received_on']}, verified {record['verified_on']}",
+                       evidence_refs=[record["id"]],
+                       next_step="Employee rechecks if HR asked for information" if case["status"] == "info_requested"
+                       else "HR reviews the updated case", visibility="employee")
+        return case
 
     def enrollment_cost_summary(self, employee_id):
         """What the employee pays per paycheck, and what the employer pays, across every election."""
@@ -526,6 +578,19 @@ class CaseStore:
         return outcome
 
     # --- Workflow B (new journey): draft -> clarification -> employee confirmation ------
+    def _leave_request(self, employee_id, fields):
+        """Build a clean leave request from employee input: bounded text, known schedule, known documents."""
+        reason = str(fields.get("reason") or "").strip()
+        if len(reason) > MAX_REASON_CHARS:
+            raise WorkflowError(f"Keep the note under {MAX_REASON_CHARS} characters")
+        leave_type = fields.get("leave_type") or ""
+        known_docs = self.data["leave_policy"]["leave_types"].get(leave_type, {}).get("required_documents", [])
+        schedule = fields.get("schedule") if fields.get("schedule") in LEAVE_SCHEDULES else ""
+        return {"employee_id": employee_id, "leave_type": leave_type,
+                "start_date": fields.get("start_date") or "", "end_date": fields.get("end_date") or "",
+                "schedule": schedule, "reason": reason,
+                "documents_attached": [d for d in (fields.get("documents_attached") or []) if d in known_docs]}
+
     def save_leave_draft(self, employee_id, fields):
         """Create or update the employee's open draft and ask the Leave Agent to clarify it.
 
@@ -533,16 +598,8 @@ class CaseStore:
         """
         if employee_id not in load_fake_hr_data()["employees"]:
             raise WorkflowError("Leave requests are available for current-employee profiles (E1001-E1005)")
-        reason = str(fields.get("reason") or "").strip()
-        if len(reason) > MAX_REASON_CHARS:
-            raise WorkflowError(f"Keep the note under {MAX_REASON_CHARS} characters")
-        leave_type = fields.get("leave_type") or ""
-        known_docs = self.data["leave_policy"]["leave_types"].get(leave_type, {}).get("required_documents", [])
-        schedule = fields.get("schedule") if fields.get("schedule") in LEAVE_SCHEDULES else ""
-        request = {"employee_id": employee_id, "leave_type": leave_type,
-                   "start_date": fields.get("start_date") or "", "end_date": fields.get("end_date") or "",
-                   "schedule": schedule, "reason": reason,
-                   "documents_attached": [d for d in (fields.get("documents_attached") or []) if d in known_docs]}
+        request = self._leave_request(employee_id, fields)
+        schedule = request["schedule"]
         draft = next((d for d in self.drafts.values()
                       if d["employee_id"] == employee_id and d["status"] == "draft"), None)
         if draft is None:
@@ -583,6 +640,106 @@ class CaseStore:
         for number, item in enumerate(case["activity"], 1):
             item["step"] = number
         return result, case, draft
+
+    # --- Workflow B: after HR decides -------------------------------------------------------
+    def _own_leave_case(self, employee_id, case_id):
+        case = self.get(case_id)
+        if case["kind"] != "leave" or case["employee_id"] != employee_id:
+            raise WorkflowError("That request was not found for this employee")   # same answer for "not yours"
+        return case
+
+    def resubmit_leave(self, employee_id, case_id, fields):
+        """The employee corrects the SAME case HR sent back. It does not create a new case or decide anything."""
+        case = self._own_leave_case(employee_id, case_id)
+        if case["status"] != "info_requested":
+            raise WorkflowError("HR has not asked for more information on this request")
+        request = self._leave_request(employee_id, fields)
+        kwargs = {"lookup": self.lookup} if self.lookup else {}
+        check = checks.leave_request_check(request, self.data, **kwargs)
+        missing = check["missing_fields"] + ([] if request["schedule"] else ["Add the leave schedule"])
+        if missing:
+            raise WorkflowError("Fix these before resubmitting: " + "; ".join(missing))
+        result = agents.run_leave_agent(request, client=self.client, data=self.data, lookup=self.lookup)
+        case.setdefault("decision_history", []).append(case.pop("decision", {"decision": "request_info"}))
+        case["resubmissions"] = case.get("resubmissions", 0) + 1
+        case.update(request=request, check=result["check"], ai=result["ai"], ai_error=result["ai_error"],
+                    status="ready_for_hr_review",
+                    employee_update="Thanks. Your corrected request is back with HR for review.")
+        self._log(case, f"Employee resubmitted after an information request (resubmission {case['resubmissions']})")
+        still = result["check"]["missing_documents"]
+        self._activity(case, "employee", "Corrected and resubmitted the request",
+                       "Still missing: " + "; ".join(still) if still else "Nothing missing",
+                       next_step="HR reviews the corrected request", visibility="employee")
+        return result, case
+
+    def _pending_items(self, case, reason):
+        """What HR is waiting for: documents the check found missing, plus what HR asked for in its own words."""
+        items = list(case["check"]["missing_documents"])
+        if not any(item.lower() in reason.lower() for item in items):
+            items.append(reason)
+        return [{"document": item, "state": "requested", "received_on": None, "verified_on": None}
+                for item in dict.fromkeys(items)]
+
+    def provide_leave_document(self, employee_id, case_id, document):
+        """The employee marks a requested document as provided: a label only, like every demo upload.
+
+        It becomes 'received', never 'verified'. Only HR's resolution can verify it.
+        """
+        case = self._own_leave_case(employee_id, case_id)
+        if case["status"] != "approved_pending_documents":
+            raise WorkflowError("No document is being requested on this request right now")
+        item = next((i for i in case["pending_documents"] if i["document"] == document), None)
+        if item is None:
+            raise WorkflowError("That document was not requested")
+        if item["state"] != "requested":
+            raise WorkflowError(f"{document.capitalize()} was already provided")
+        item.update(state="received", received_on=self.data["as_of"])
+        self._log(case, f"Employee marked a requested document as provided: {document}")
+        self._activity(case, "employee", f"Provided the requested document: {document}",
+                       "Received, waiting for HR to verify it", visibility="employee")
+        if all(i["state"] == "received" for i in case["pending_documents"]):
+            case["status"] = "approved_documents_received"
+            case["employee_update"] = "Thanks. HR will check your document(s) and confirm."
+            self._activity(case, "code", "Every requested document has been received",
+                           "Approved, waiting for HR to verify", next_step="HR verifies the documents",
+                           visibility="employee")
+        return case
+
+    def hr_resolve_pending_documents(self, case_id, resolution, reason=""):
+        """HR closes the loop on a conditionally approved leave request."""
+        case = self.get(case_id)
+        reason = (reason or "").strip()
+        if case["kind"] != "leave":
+            raise WorkflowError("Pending documents apply to leave requests")
+        if resolution not in DOCUMENT_RESOLUTIONS:
+            raise WorkflowError("Resolution must be verify_documents, request_again or withdraw_approval")
+        allowed = {"verify_documents": ("approved_documents_received",),
+                   "request_again": ("approved_documents_received",),
+                   "withdraw_approval": ("approved_pending_documents", "approved_documents_received")}[resolution]
+        if case["status"] not in allowed:
+            raise WorkflowError("This request is not waiting for that document step "
+                                f"(it is {case['status'].replace('_', ' ')})")
+        if resolution != "verify_documents" and not reason:
+            raise WorkflowError("A reason is required for this resolution")
+        if resolution == "verify_documents":
+            for item in case["pending_documents"]:
+                item.update(state="verified", verified_on=self.data["as_of"])
+            case.update(status="approved", employee_update="Your documents were verified. Your leave request is fully approved.")
+            action = "Verified the requested documents and completed the approval"
+        elif resolution == "request_again":
+            for item in case["pending_documents"]:
+                item.update(state="requested", received_on=None)
+            case.update(status="approved_pending_documents",
+                        employee_update=f"HR needs a corrected document: {reason}")
+            action = "Asked for the document(s) again"
+        else:
+            case.update(status="denied", employee_update=f"Your approval was withdrawn: {reason}")
+            action = "Withdrew the conditional approval"
+        case.setdefault("decision_history", []).append({"decision": resolution, "reason": reason})
+        self._log(case, f"HR document resolution: {resolution}" + (f" ({reason})" if reason else ""))
+        self._activity(case, "hr", action, reason or case["employee_update"], visibility="employee",
+                       next_step="Employee provides the document again" if resolution == "request_again" else "")
+        return case
 
     # --- HR decisions ------------------------------------------------------------------
     def _revalidate_enrollment_for_decision(self, case, decision, expected_revision):
@@ -629,6 +786,8 @@ class CaseStore:
         case["status"] = {"approve": "approved", "deny": "denied", "request_info": "info_requested",
                           "approved_pending_documents": "approved_pending_documents"}[decision]
         case["decision"] = {"decision": decision, "reason": reason, "reviewed_revision": case.get("review_revision")}
+        if decision == "approved_pending_documents":
+            case["pending_documents"] = self._pending_items(case, reason)
         case["employee_update"] = labels[decision]
         self._log(case, f"HR decision: {decision}" + (f" ({reason})" if reason else ""))
         self._activity(case, "hr", f"Recorded the HR decision: {decision.replace('_', ' ')}", labels[decision],

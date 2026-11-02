@@ -73,6 +73,10 @@ def employee_view(case):
         view["missing"] = check["missing_fields"] + [f"Upload: {d}" for d in check["missing_documents"]]
         view["guidance"] = (case.get("ai") or {}).get("employee_message")
         view["ai_error"] = case.get("ai_error")
+        view["request"] = {k: case["request"].get(k) for k in
+                           ("leave_type", "start_date", "end_date", "schedule", "reason", "documents_attached")}
+        view["pending_documents"] = [{"document": i["document"], "state": i["state"]}
+                                     for i in case.get("pending_documents", [])]
     else:
         view["guidance"] = (case.get("ai") or {}).get("employee_message")
         view["ai_error"] = case.get("ai_error")
@@ -228,6 +232,17 @@ def handle(store, path, body):
     if path == "/api/employee/leave/confirm":
         _, case, draft = store.confirm_leave_draft(eid, body.get("draft_id"), body.get("confirmed"))
         return {"case": employee_view(case), "draft": draft_view(draft)}
+    if path == "/api/employee/leave/document":
+        case = store.provide_leave_document(eid, body.get("case_id"), body.get("document", ""))
+        return {"case": employee_view(case)}
+    if path == "/api/employee/leave/resubmit":
+        fields = {k: body.get(k) for k in ("leave_type", "start_date", "end_date", "schedule", "reason",
+                                           "documents_attached")}
+        result, case = store.resubmit_leave(eid, body.get("case_id"), fields)
+        check = result["check"]
+        return {"case": employee_view(case),
+                "missing": check["missing_fields"] + [f"Upload: {d}" for d in check["missing_documents"]],
+                "message": (result["ai"] or {}).get("employee_message"), "ai_error": result["ai_error"]}
     if path == "/api/employee/cases":
         return {"cases": [employee_view(c) for c in store.employee_cases(eid)]}
     if path == "/api/hr/queue":
@@ -235,6 +250,12 @@ def handle(store, path, body):
     if path == "/api/hr/decide":
         return {"case": store.hr_decide(body.get("case_id"), body.get("decision"), body.get("reason", ""),
                                         expected_revision=body.get("review_revision"))}
+    if path == "/api/hr/evidence/verify":
+        return {"case": store.hr_verify_document(body.get("case_id"), body.get("evidence_ref"),
+                                                 expected_revision=body.get("review_revision"))}
+    if path == "/api/hr/leave/resolve":
+        return {"case": store.hr_resolve_pending_documents(body.get("case_id"), body.get("resolution"),
+                                                           body.get("reason", ""))}
     if path == "/api/hr/vendor/prepare":
         return {"case": store.prepare_vendor_records(body.get("case_id"))}
     if path == "/api/hr/vendor/sent":
