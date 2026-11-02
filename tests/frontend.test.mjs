@@ -84,6 +84,22 @@ test('workflow API sends only the selected identity or case and explicit HR inpu
   ]);
 });
 
+test('HR decisions carry the review revision HR opened, so a changed case is rejected by the backend', async t => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  const calls = [];
+  globalThis.fetch = async (path, options) => {
+    calls.push(JSON.parse(options.body));
+    return { ok: true, json: async () => ({ case: { id: 'C2' } }) };
+  };
+  await api.decide('C2', 'approve', '', 3);
+  await api.decide('C2', 'deny', 'No', undefined);
+  assert.deepEqual(calls, [
+    { case_id: 'C2', decision: 'approve', reason: '', review_revision: 3 },
+    { case_id: 'C2', decision: 'deny', reason: 'No' },
+  ]);
+});
+
 test('lost mutation response is not retried or misreported as a failed action', async t => {
   const original = globalThis.fetch;
   t.after(() => { globalThis.fetch = original; });

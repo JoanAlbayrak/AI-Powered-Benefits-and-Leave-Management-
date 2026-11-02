@@ -7,6 +7,9 @@ Workflow B (leave): employee submits -> Leave Agent -> HR review -> HR decides -
 Only HR actions move a case past review. Every step is logged in the case history.
 """
 
+import hashlib
+import json
+
 from benefits_leave import agents, checks
 from benefits_leave.hr_lookup import load_fake_hr_data, lookup_employee_leave_balance
 
@@ -23,6 +26,7 @@ ELECTION_STATUSES = {"elected", "waived", "not_started"}
 NON_TIER_PLAN_FIELDS = {"description", "network", "deductible", "total_premium"}
 MAX_NAME_CHARS = 80
 DEPENDENT_RELATIONSHIPS = {"spouse", "child"}
+OPEN_ENROLLMENT_STATUSES = ("incomplete", "ready_for_hr_review", "info_requested")
 
 
 class WorkflowError(Exception):
@@ -66,6 +70,47 @@ class CaseStore:
             "evidence_refs": list(evidence_refs), "unknowns": list(unknowns), "next_step": next_step,
             "visibility": visibility})
 
+    # --- keeping an open review in step with the employee's data -----------------------
+    def _review_fingerprint(self, employee_id):
+        """A hash of everything an enrollment review depends on: elections, dependents and proof records."""
+        hire = self.data["new_hires"][employee_id]
+        material = {"elections": hire["elections"], "dependents": hire["dependents"],
+                    "evidence": self.data.get("evidence", {}).get(employee_id, [])}
+        return hashlib.sha256(json.dumps(material, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+    def _stamp_review(self, case, *, stale_ai):
+        """Record which version of the data this case's saved review describes."""
+        case["review_fingerprint"] = self._review_fingerprint(case["employee_id"])
+        case["review_revision"] = case.get("review_revision", 0) + 1
+        case["ai_stale"] = stale_ai
+
+    def _open_enrollment_case(self, employee_id):
+        case = next((c for c in self.cases.values()
+                     if c["kind"] == "enrollment" and c["employee_id"] == employee_id), None)
+        return case if case and case["status"] in OPEN_ENROLLMENT_STATUSES else None
+
+    def _refresh_enrollment_review(self, case, why):
+        """Recompute an open case's review from the current data. Code only: no agent runs here.
+
+        The old AI summary described the old selections, so it is dropped until the employee rechecks.
+        """
+        employee_id = case["employee_id"]
+        status = checks.enrollment_status(employee_id, self.data)
+        case.update(enrollment=status, evidence=checks.evidence_status(employee_id, self.data),
+                    status="incomplete" if status["missing"] else "ready_for_hr_review",
+                    ai=None, ai_error=None)
+        self._stamp_review(case, stale_ai=True)
+        missing = len(status["missing"])
+        self._log(case, f"Review refreshed after a change: {why}")
+        self._activity(case, "code", f"Refreshed the saved review after a change ({why})",
+                       f"{missing} item{'s' if missing != 1 else ''} still missing" if missing else "Nothing missing",
+                       next_step="Employee rechecks for a new explanation; HR reviews the updated case")
+
+    def _refresh_after_edit(self, employee_id, why):
+        case = self._open_enrollment_case(employee_id)
+        if case:
+            self._refresh_enrollment_review(case, why)
+
     def get(self, case_id):
         if case_id not in self.cases:
             raise WorkflowError(f"No case {case_id}")
@@ -77,6 +122,7 @@ class CaseStore:
                               enrollment=checks.enrollment_status("E2004", self.data), ai=None,
                               sent_at="2026-09-28")   # 28 days before the demo's as_of: shows "approaching window"
         case["handoff"] = checks.build_vendor_handoff(case["id"], "E2004", self.data, "Demo approval")
+        self._stamp_review(case, stale_ai=False)
         self._log(case, "Demo: approved by HR and sent to vendors")
         self._activity(case, "hr", "Approved the enrollment and recorded sending (seeded demo case)",
                        evidence_refs=[case["handoff"]["snapshot_ref"]], next_step="Check vendor confirmations")
@@ -86,7 +132,7 @@ class CaseStore:
         """Employee checks their enrollment. Creates or updates their case."""
         case = next((c for c in self.cases.values()
                      if c["kind"] == "enrollment" and c["employee_id"] == employee_id), None)
-        if case and case["status"] not in ("incomplete", "ready_for_hr_review", "info_requested"):
+        if case and case["status"] not in OPEN_ENROLLMENT_STATUSES:
             # A decided case is a historical snapshot, not a new AI request.
             return {"status": case["enrollment"], "ai": case.get("ai"),
                     "ai_error": case.get("ai_error")}, case
@@ -102,6 +148,7 @@ class CaseStore:
         else:
             case.update(status=new_status, enrollment=status, ai=result["ai"], ai_error=result["ai_error"],
                         evidence=evidence)
+        self._stamp_review(case, stale_ai=False)
         self._log(case, f"Enrollment checked: {status['enrollment_state']}")
         missing = len(status["missing"])
         self._activity(case, "enrollment_agent" if result["ai"] else "code",
@@ -168,6 +215,7 @@ class CaseStore:
             raise WorkflowError(f"Your enrollment was already decided (case {locked['id']}); "
                                 f"contact HR to request a change")
         hire["elections"][benefit] = self._validate_election_fields(benefit, fields)
+        self._refresh_after_edit(employee_id, f"{benefit} election changed")
         return checks.enrollment_status(employee_id, self.data)
 
     def consider_election(self, employee_id, benefit, fields):
@@ -213,6 +261,7 @@ class CaseStore:
         if len(name) > MAX_NAME_CHARS:
             raise WorkflowError(f"Keep the name under {MAX_NAME_CHARS} characters")
         hire["dependents"].append({"name": name, "relationship": relationship, "proof_received": False})
+        self._refresh_after_edit(employee_id, "dependent added")
         return checks.evidence_status(employee_id, self.data)
 
     def mark_document_uploaded(self, employee_id, relationship, name):
@@ -241,6 +290,7 @@ class CaseStore:
             "id": entry_id, "employee_id": employee_id, "scope": "enrollment", "requirement": requirement,
             "dependent": name, "state": "received", "received_on": self.data["as_of"],
             "channel": "employee portal upload", "verified_by": None, "verified_on": None})
+        self._refresh_after_edit(employee_id, "dependent document marked received")
         return checks.evidence_status(employee_id, self.data)
 
     def enrollment_cost_summary(self, employee_id):
@@ -535,7 +585,18 @@ class CaseStore:
         return result, case, draft
 
     # --- HR decisions ------------------------------------------------------------------
-    def hr_decide(self, case_id, decision, reason=""):
+    def _revalidate_enrollment_for_decision(self, case, decision, expected_revision):
+        """HR decides on the data as it is now, and on the version HR actually looked at."""
+        if expected_revision is not None and expected_revision != case.get("review_revision"):
+            raise WorkflowError("This case changed after you opened it. Reload it and review the updated version.")
+        if decision != "approve":
+            return
+        if case["review_fingerprint"] != self._review_fingerprint(case["employee_id"]):
+            self._refresh_enrollment_review(case, "selections changed before the decision")
+            raise WorkflowError("The employee's selections changed since this case was reviewed. "
+                                "The review was refreshed; review it again before approving.")
+
+    def hr_decide(self, case_id, decision, reason="", expected_revision=None):
         case = self.get(case_id)
         reason = (reason or "").strip()
         if decision not in DECISIONS:
@@ -548,6 +609,7 @@ class CaseStore:
             raise WorkflowError("A reason is required for this decision")
 
         if case["kind"] == "enrollment":
+            self._revalidate_enrollment_for_decision(case, decision, expected_revision)
             if decision == "approve":
                 if case["enrollment"]["missing"]:
                     raise WorkflowError("Can't approve: the employee still has missing items")
@@ -566,7 +628,7 @@ class CaseStore:
 
         case["status"] = {"approve": "approved", "deny": "denied", "request_info": "info_requested",
                           "approved_pending_documents": "approved_pending_documents"}[decision]
-        case["decision"] = {"decision": decision, "reason": reason}
+        case["decision"] = {"decision": decision, "reason": reason, "reviewed_revision": case.get("review_revision")}
         case["employee_update"] = labels[decision]
         self._log(case, f"HR decision: {decision}" + (f" ({reason})" if reason else ""))
         self._activity(case, "hr", f"Recorded the HR decision: {decision.replace('_', ' ')}", labels[decision],

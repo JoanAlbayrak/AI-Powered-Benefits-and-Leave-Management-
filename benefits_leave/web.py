@@ -225,7 +225,8 @@ def handle(store, path, body):
     if path == "/api/hr/queue":
         return {"cases": store.hr_queue()}
     if path == "/api/hr/decide":
-        return {"case": store.hr_decide(body.get("case_id"), body.get("decision"), body.get("reason", ""))}
+        return {"case": store.hr_decide(body.get("case_id"), body.get("decision"), body.get("reason", ""),
+                                        expected_revision=body.get("review_revision"))}
     if path == "/api/hr/vendor/prepare":
         return {"case": store.prepare_vendor_records(body.get("case_id"))}
     if path == "/api/hr/vendor/sent":

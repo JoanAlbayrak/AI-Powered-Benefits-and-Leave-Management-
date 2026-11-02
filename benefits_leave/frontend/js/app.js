@@ -196,7 +196,8 @@ function bindView() {
     }
     const id = decisionForm.dataset.caseId;
     const selected = decision.value;
-    performAction(() => api.decide(id, selected, reason), 'HR decision recorded.');
+    const revision = decisionForm.dataset.reviewRevision === '' ? undefined : Number(decisionForm.dataset.reviewRevision);
+    performAction(() => api.decide(id, selected, reason, revision), 'HR decision recorded.');
   });
   document.querySelector('[data-workflow-action="prepare"]')?.addEventListener('click', event => {
     const id = event.currentTarget.dataset.caseId;
