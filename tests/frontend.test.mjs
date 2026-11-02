@@ -308,3 +308,13 @@ test('the employee case page offers the correction path that matches the case ki
   assert.match(html, /Update my enrollment/);
   assert.doesNotMatch(html, /leave-resubmit-form/);
 });
+
+test('the cost panel shows the vesting rule with its policy source, and nothing when there is none', () => {
+  const base = { enrollment: { done: [], missing: [], notes: [] }, selections: [], dependents: [], evidence: [], help_thread: [], plan_options: { plans: { medical: {}, dental: {}, vision: {} } }, cases: [], leave_drafts: [], consider_results: {}, leave_types: [], employee: { id: 'E2002', kind: 'new hire' } };
+  const summary = { employee_per_paycheck: 120, employer_per_paycheck: 200, retirement_employee_contribution: '4% of pay', retirement_employer_match: '4% of pay' };
+  const withRule = employeeView({ page: 'benefits' }, { ...base, cost_summary: { ...summary, retirement_vesting: { text: 'The match vests over 4 <b>years</b>.', ref: 'DEMO-401K-VESTING@v1' } } });
+  assert.match(withRule, /DEMO-401K-VESTING@v1/);
+  assert.match(withRule, /The match vests over 4/);
+  assert.doesNotMatch(withRule, /<b>years<\/b>/);                         // escaped
+  assert.doesNotMatch(employeeView({ page: 'benefits' }, { ...base, cost_summary: { ...summary, retirement_vesting: null } }), /vest/i);
+});

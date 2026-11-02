@@ -37,8 +37,8 @@ def live_check(client=None):
 def main(argv):
     status = runner.readiness()
     print("Benefits & Leave AI readiness")
-    for key in ("provider", "model", "effort", "timeout_seconds", "max_retries", "key_configured", "sdk_installed"):
-        print(f"  {key:16} {status[key]}")
+    for key in ("provider", "model", "effort", "timeout_seconds", "max_retries", "action_budget_seconds", "key_configured", "sdk_installed"):
+        print(f"  {key:22} {status[key]}")
     for problem in status["problems"]:
         print(f"  ! {problem}")
     if "--live" not in argv:

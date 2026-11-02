@@ -15,7 +15,7 @@ function selectionCards(data) {
 function costSummaryPanel(data) {
   const c = data.cost_summary;
   if (!c || (!c.employee_per_paycheck && !c.employer_per_paycheck && !c.retirement_employee_contribution)) return '';
-  return panel('Your cost per paycheck', `<div class="panel-body"><dl class="definition"><div><dt>You pay</dt><dd>${money(c.employee_per_paycheck)}</dd></div><div><dt>Company pays</dt><dd>${money(c.employer_per_paycheck)}</dd></div>${c.retirement_employee_contribution ? `<div><dt>Your 401(k) contribution</dt><dd>${escape(c.retirement_employee_contribution)}</dd></div><div><dt>Employer match</dt><dd>${escape(c.retirement_employer_match)}</dd></div>` : ''}</dl><p class="inline-note">Medical, dental and vision only. Figures from currently elected plans.</p></div>`, 'What you and the company each pay for your current elections.');
+  return panel('Your cost per paycheck', `<div class="panel-body"><dl class="definition"><div><dt>You pay</dt><dd>${money(c.employee_per_paycheck)}</dd></div><div><dt>Company pays</dt><dd>${money(c.employer_per_paycheck)}</dd></div>${c.retirement_employee_contribution ? `<div><dt>Your 401(k) contribution</dt><dd>${escape(c.retirement_employee_contribution)}</dd></div><div><dt>Employer match</dt><dd>${escape(c.retirement_employer_match)}</dd></div>` : ''}</dl>${c.retirement_vesting ? `<p class="inline-note">${escape(c.retirement_vesting.text)} <span class="ref-chip">${escape(c.retirement_vesting.ref)}</span></p>` : ''}<p class="inline-note">Medical, dental and vision only. Figures from currently elected plans.</p></div>`, 'What you and the company each pay for your current elections.');
 }
 
 function planTierOptions(benefit, data, current) {

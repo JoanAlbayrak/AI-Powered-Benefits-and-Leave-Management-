@@ -144,9 +144,9 @@ class LeaveJourney(unittest.TestCase):
 
 def intake_answer(suggested_type="own_health", documents=("medical certification",)):
     return {"suggested_leave_type": suggested_type, "reason": "Sounds like a medical situation.",
-            "documents_likely_needed": list(documents), "balance_note": "Sick leave fits better than PTO here.",
+            "documents_likely_needed": list(documents), "balance_note": "Own-health leave draws on the sick balance first, then PTO.",
             "follow_up_question": "About how many days do you expect to need?",
-            "policy_refs": ["DEMO-LEAVE-DOCUMENTS@v1"]}
+            "policy_refs": ["DEMO-LEAVE-DOCUMENTS@v1", "DEMO-LEAVE-BALANCES@v1"]}
 
 
 def intake_script(answer):
@@ -170,7 +170,7 @@ class LeaveIntake(unittest.TestCase):
                         {"employee_id": "E1001", "description": "I need surgery and will be out a while"})
         self.assertEqual(result["suggested_leave_type"], "own_health")
         self.assertIn("medical certification", result["documents_likely_needed"])
-        self.assertIn("Sick leave", result["balance_note"])
+        self.assertIn("sick balance", result["balance_note"])
 
     def test_creates_no_draft_and_no_case(self):
         store = CaseStore(client=ScriptedClient(intake_script(intake_answer())))

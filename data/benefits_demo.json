@@ -197,6 +197,8 @@
        "title": "Clarification is not a decision", "text": "Questions from an assistant help an employee prepare a request. They are not HR notices, approvals or denials."},
       {"id": "DEMO-ENR-DEPENDENT-ELIGIBILITY", "version": 1, "effective_from": "2026-01-01", "applies_to": ["enrollment"], "source": "Synthetic demo employer policy",
        "title": "Who counts as a dependent", "text": "Eligible dependents are a spouse and children. Parents, domestic partners not registered with HR, and other relatives are not eligible dependents under medical, dental or vision coverage, regardless of tier."},
+      {"id": "DEMO-LEAVE-BALANCES", "version": 1, "effective_from": "2026-01-01", "applies_to": ["leave"], "source": "Synthetic demo employer policy",
+       "title": "Which balance a leave draws on", "text": "Own-health leave draws on the sick balance first, then PTO once sick hours are used. Family care and bonding leave draw on PTO. Personal leave draws on the personal balance, then PTO. HR confirms the balance applied when it decides; this is guidance, not an approval."},
       {"id": "DEMO-401K-VESTING", "version": 1, "effective_from": "2026-01-01", "applies_to": ["enrollment"], "source": "Synthetic demo employer policy",
        "title": "401(k) match vesting", "text": "Your own contributions are always 100% yours. The employer match vests 25% per year of service and is fully yours after 4 years of service. Vesting only affects what happens to the match if you leave the company before it is fully vested; it does not affect your contribution choice today."}
     ]

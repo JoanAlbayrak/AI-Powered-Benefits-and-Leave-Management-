@@ -10,7 +10,7 @@ Only HR actions move a case past review. Every step is logged in the case histor
 import hashlib
 import json
 
-from benefits_leave import agents, checks
+from benefits_leave import agents, checks, runner
 from benefits_leave.hr_lookup import load_fake_hr_data, lookup_employee_leave_balance
 
 DECISIONS = {"approve", "deny", "request_info", "approved_pending_documents"}
@@ -46,6 +46,7 @@ class CaseStore:
         self.drafts = {}              # leave drafts: not cases until the employee confirms
         self._next_draft = 1
         self._next = 1
+        self.new_budget = runner.new_budget   # one shared time budget per user action (tests swap the clock)
         self._seed()
 
     # --- helpers -----------------------------------------------------------------------
@@ -368,11 +369,17 @@ class CaseStore:
             match_percent = min(percent, self.data["retirement_plan"]["match_up_to_percent"])
             # Informational only -- a percent of pay, not a dollar figure this demo computes payroll for.
             employee_total_note = f"{percent}% of pay"
-            employer_match_note = f"{match_percent}% of pay (vests 25%/year, fully yours after 4 years)"
+            employer_match_note = f"{match_percent}% of pay"
         else:
             employee_total_note = employer_match_note = None
+        vesting = self.data["retirement_plan"].get("vesting_schedule")
+        entry = next((e for e in checks.policy_entries("enrollment", self.data) if e["id"] == "DEMO-401K-VESTING"), None)
+        # Only state what the approved plan data says, and cite where it comes from; no data, no claim.
+        retirement_vesting = ({"text": vesting["note"], "ref": entry["ref"]}
+                              if retirement.get("status") == "elected" and vesting and entry else None)
         return {"employee_per_paycheck": round(employee_total, 2), "employer_per_paycheck": round(employer_total, 2),
-                "retirement_employee_contribution": employee_total_note, "retirement_employer_match": employer_match_note}
+                "retirement_employee_contribution": employee_total_note, "retirement_employer_match": employer_match_note,
+                "retirement_vesting": retirement_vesting}
 
     def enrollment_help(self, employee_id, question):
         """Answer an employee's question. Never creates a case, changes a status or sends a notice."""
@@ -417,7 +424,7 @@ class CaseStore:
                        next_step="Check vendor confirmations")
         return case
 
-    def _consultation_router(self, case):
+    def _consultation_router(self, case, budget):
         """Workflow code routes the Vendor Agent's question to the Enrollment Agent.
 
         The employee, case and approved snapshot come from the case, never from the model.
@@ -455,6 +462,8 @@ class CaseStore:
             if used["count"] >= MAX_CONSULTATIONS_PER_RUN:
                 return unavailable("Consultation budget for this run is already used")
             used["count"] += 1
+            if budget.remaining() < runner.MIN_CONSULT_SECONDS:
+                return unavailable("The time budget for this action was already used up")
             if question_type not in CONSULT_QUESTION_TYPES:
                 return unavailable(f"Question type '{question_type}' is not allowed")
             snapshot = checks.approved_snapshot_record(handoff, benefit)
@@ -471,7 +480,7 @@ class CaseStore:
                                          "dependent": e["dependent"], "state": e["state"]}
                                         for e in checks.evidence_for(case["employee_id"], self.data)]}
             result = agents.run_enrollment_specialist(snapshot, dependents, request["question"],
-                                                      client=self.client, data=self.data)
+                                                      client=self.client, data=self.data, budget=budget)
             if result["ai"] is None:
                 return finish({"status": "unavailable", "finding": None, "evidence_refs": [],
                                "unknowns": [f"The Enrollment Agent could not answer: {result['ai_error']}"],
@@ -490,9 +499,10 @@ class CaseStore:
         before = len(case.get("consultations", []))
         activity_start = len(case.get("activity", []))
         try:
-            consult = self._consultation_router(case) if case.get("handoff") else None
+            budget = self.new_budget()        # the vendor run and its specialist consultation share it
+            consult = self._consultation_router(case, budget) if case.get("handoff") else None
             result = agents.run_vendor_agent(case.get("handoff"), client=self.client, data=self.data,
-                                             consult=consult)
+                                             consult=consult, budget=budget)
         except agents.HandoffError as exc:
             self._log(case, f"Vendor Agent stopped: bad handoff ({exc})")
             raise WorkflowError(f"The handoff to the Vendor Agent is not valid: {exc}") from exc
