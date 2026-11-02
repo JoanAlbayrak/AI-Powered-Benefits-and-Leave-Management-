@@ -7,6 +7,7 @@ Workflow B (leave): employee submits -> Leave Agent -> HR review -> HR decides -
 Only HR actions move a case past review. Every step is logged in the case history.
 """
 
+import copy
 import hashlib
 import json
 
@@ -40,9 +41,15 @@ class StaleReviewError(WorkflowError):
 
 class CaseStore:
     def __init__(self, data=None, client=None, lookup=None):
-        self.data = data or checks.load_data()
+        # A reset starts over from the same source: the data files on disk, or a pristine copy of injected data.
+        self._pristine = copy.deepcopy(data) if data else None
         self.client = client          # None = real Claude; tests pass a pretend client
         self.lookup = lookup          # None = the real leave lookup tool
+        self._start_fresh(first_data=data)
+
+    def _start_fresh(self, first_data=None):
+        # The first start uses the caller's own data object (callers may keep editing it); a reset starts clean.
+        self.data = first_data or (copy.deepcopy(self._pristine) if self._pristine else checks.load_data())
         self.cases = {}
         self.help_threads = {}        # employee_id -> enrollment questions and answers (no case state)
         self.consider_results = {}    # employee_id -> {benefit: last "consider" result} (no case state)
@@ -50,8 +57,17 @@ class CaseStore:
         self.drafts = {}              # leave drafts: not cases until the employee confirms
         self._next_draft = 1
         self._next = 1
-        self.new_budget = runner.new_budget   # one shared time budget per user action (tests swap the clock)
+        self.new_budget = getattr(self, "new_budget", runner.new_budget)   # one shared time budget per action (tests swap the clock)
         self._seed()
+
+    def reset(self):
+        """Demo only: forget every case, draft, edit and chat, and re-read the data files.
+
+        Edit data/benefits_demo.json or data/fake_employees.json, then reset to see the change without
+        restarting the server. Nothing outside this process changes.
+        """
+        self._start_fresh()
+        return {"cases": len(self.cases), "new_hires": len(self.data["new_hires"])}
 
     # --- helpers -----------------------------------------------------------------------
     def _new_case(self, kind, employee_id, **fields):
@@ -227,7 +243,7 @@ class CaseStore:
         """The employee elects, waives, or resets one benefit. Code validates it; nothing here chooses for them."""
         hire = self.data["new_hires"].get(employee_id)
         if hire is None:
-            raise WorkflowError("Elections are available for new-hire profiles (E2001-E2006)")
+            raise WorkflowError("Elections are available for new-hire profiles")
         locked = self._decided_enrollment_case(employee_id)
         if locked:
             raise WorkflowError(f"Your enrollment was already decided (case {locked['id']}); "
@@ -244,7 +260,7 @@ class CaseStore:
         """
         hire = self.data["new_hires"].get(employee_id)
         if hire is None:
-            raise WorkflowError("Elections are available for new-hire profiles (E2001-E2006)")
+            raise WorkflowError("Elections are available for new-hire profiles")
         if self._decided_enrollment_case(employee_id):
             raise WorkflowError("Your enrollment was already decided; this choice can no longer be changed")
         pending = self._validate_election_fields(benefit, fields)
@@ -268,7 +284,7 @@ class CaseStore:
         """The employee adds a spouse or child as a dependent. Proof is separate (mark_document_uploaded)."""
         hire = self.data["new_hires"].get(employee_id)
         if hire is None:
-            raise WorkflowError("Dependents are available for new-hire profiles (E2001-E2006)")
+            raise WorkflowError("Dependents are available for new-hire profiles")
         if self._decided_enrollment_case(employee_id):
             raise WorkflowError("Your enrollment was already decided; contact HR to add a dependent")
         if relationship not in DEPENDENT_RELATIONSHIPS:
@@ -289,7 +305,7 @@ class CaseStore:
         """
         hire = self.data["new_hires"].get(employee_id)
         if hire is None:
-            raise WorkflowError("Documents are available for new-hire profiles (E2001-E2006)")
+            raise WorkflowError("Documents are available for new-hire profiles")
         if self._decided_enrollment_case(employee_id):
             raise WorkflowError("Your enrollment was already decided; contact HR about this document")
         if relationship not in DEPENDENT_RELATIONSHIPS:
@@ -389,7 +405,7 @@ class CaseStore:
         """Answer an employee's question. Never creates a case, changes a status or sends a notice."""
         question = (question or "").strip()
         if employee_id not in self.data["new_hires"]:
-            raise WorkflowError("Enrollment help is available for new-hire profiles (E2001-E2006)")
+            raise WorkflowError("Enrollment help is available for new-hire profiles")
         if not question:
             raise WorkflowError("Type a question for the Enrollment Agent")
         if len(question) > MAX_QUESTION_CHARS:
@@ -571,7 +587,7 @@ class CaseStore:
         The employee still picks the final leave type themselves on the form that follows.
         """
         if employee_id not in load_fake_hr_data()["employees"]:
-            raise WorkflowError("Leave requests are available for current-employee profiles (E1001-E1005)")
+            raise WorkflowError("Leave requests are available for current-employee profiles")
         description = str(description or "").strip()
         if not description:
             raise WorkflowError("Describe your situation for the Leave Agent")
@@ -611,7 +627,7 @@ class CaseStore:
         A draft is not a case: HR does not see it and no formal state changes.
         """
         if employee_id not in load_fake_hr_data()["employees"]:
-            raise WorkflowError("Leave requests are available for current-employee profiles (E1001-E1005)")
+            raise WorkflowError("Leave requests are available for current-employee profiles")
         request = self._leave_request(employee_id, fields)
         schedule = request["schedule"]
         draft = next((d for d in self.drafts.values()

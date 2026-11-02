@@ -138,6 +138,90 @@
         {"name": "Layla Haddad", "relationship": "spouse", "proof_received": true},
         {"name": "Zain Haddad", "relationship": "child", "proof_received": true}
       ]
+    },
+    "E2007": {
+      "name": "Aisha Rahman",
+      "start_date": "2026-10-14",
+      "weekly_hours": 40,
+      "work_state": "NY",
+      "elections": {
+        "medical": {"status": "elected", "plan": "Silver PPO", "tier": "employee"},
+        "dental": {"status": "elected", "plan": "Basic Dental", "tier": "employee"},
+        "vision": {"status": "elected", "plan": "Standard Vision", "tier": "employee"},
+        "retirement": {"status": "elected", "percent": 6}
+      },
+      "dependents": []
+    },
+    "E2008": {
+      "name": "Tomás Ferreira",
+      "start_date": "2026-10-16",
+      "weekly_hours": 40,
+      "work_state": "NJ",
+      "elections": {
+        "medical": {"status": "elected", "plan": "Gold HMO", "tier": "family"},
+        "dental": {"status": "elected", "plan": "Plus Dental", "tier": "family"},
+        "vision": {"status": "elected", "plan": "Standard Vision", "tier": "family"},
+        "retirement": {"status": "elected", "percent": 3}
+      },
+      "dependents": [
+        {"name": "Camila Ferreira", "relationship": "spouse", "proof_received": true},
+        {"name": "Mateo Ferreira", "relationship": "child", "proof_received": false},
+        {"name": "Lucia Ferreira", "relationship": "child", "proof_received": false}
+      ]
+    },
+    "E2009": {
+      "name": "Chloe Washington",
+      "start_date": "2026-10-20",
+      "weekly_hours": 24,
+      "work_state": "NY",
+      "elections": {
+        "medical": {"status": "elected", "plan": "Bronze HMO", "tier": "employee"},
+        "dental": {"status": "waived"},
+        "vision": {"status": "waived"},
+        "retirement": {"status": "elected", "percent": 0}
+      },
+      "dependents": []
+    },
+    "E2010": {
+      "name": "Jamal Whitfield",
+      "start_date": "2026-09-22",
+      "weekly_hours": 40,
+      "work_state": "NY",
+      "elections": {
+        "medical": {"status": "elected", "plan": "Silver PPO", "tier": "employee"},
+        "dental": {"status": "not_started"},
+        "vision": {"status": "waived"},
+        "retirement": {"status": "not_started"}
+      },
+      "dependents": []
+    },
+    "E2011": {
+      "name": "Elif Demir",
+      "start_date": "2026-10-26",
+      "weekly_hours": 40,
+      "work_state": "NY",
+      "elections": {
+        "medical": {"status": "not_started"},
+        "dental": {"status": "not_started"},
+        "vision": {"status": "not_started"},
+        "retirement": {"status": "not_started"}
+      },
+      "dependents": []
+    },
+    "E2012": {
+      "name": "Rosa Delgado",
+      "start_date": "2026-09-29",
+      "weekly_hours": 40,
+      "work_state": "NY",
+      "elections": {
+        "medical": {"status": "elected", "plan": "Gold HMO", "tier": "employee_spouse"},
+        "dental": {"status": "elected", "plan": "Plus Dental", "tier": "employee_spouse"},
+        "vision": {"status": "elected", "plan": "Standard Vision", "tier": "employee_spouse"},
+        "retirement": {"status": "elected", "percent": 5}
+      },
+      "dependents": [
+        {"name": "Andrés Delgado", "relationship": "spouse", "proof_received": true}
+      ]
     }
   },
   "vendor_confirmations": {
@@ -150,6 +234,17 @@
     "E2006": {
       "medical": {"status": "confirmed", "plan": "Silver PPO", "tier": "family"},
       "dental": {"status": "documents_requested", "requested_doc": "a completed dependent enrollment form for Plus Dental family coverage"}
+    },
+    "E2007": {
+      "medical": {"status": "confirmed", "plan": "Silver PPO", "tier": "employee"},
+      "dental": {"status": "confirmed", "plan": "Basic Dental", "tier": "employee"},
+      "vision": {"status": "confirmed", "plan": "Standard Vision", "tier": "employee"},
+      "retirement": {"status": "confirmed", "percent": 6}
+    },
+    "E2012": {
+      "medical": {"status": "confirmed", "plan": "Gold HMO", "tier": "employee_spouse"},
+      "vision": {"status": "confirmed", "plan": "Standard Vision", "tier": "employee"},
+      "retirement": {"status": "confirmed", "percent": 4}
     }
   },
   "leave_policy": {
@@ -172,6 +267,16 @@
        "state": "verified", "received_on": "2026-10-09", "channel": "employee portal upload", "verified_by": "HR specialist (demo)", "verified_on": "2026-10-12"},
       {"id": "EV-E2006-02", "employee_id": "E2006", "scope": "enrollment", "requirement": "birth certificate", "dependent": "Zain Haddad",
        "state": "verified", "received_on": "2026-10-09", "channel": "employee portal upload", "verified_by": "HR specialist (demo)", "verified_on": "2026-10-12"}
+    ],
+    "E2008": [
+      {"id": "EV-E2008-01", "employee_id": "E2008", "scope": "enrollment", "requirement": "marriage certificate", "dependent": "Camila Ferreira",
+       "state": "verified", "received_on": "2026-10-17", "channel": "employee portal upload", "verified_by": "HR specialist (demo)", "verified_on": "2026-10-19"},
+      {"id": "EV-E2008-02", "employee_id": "E2008", "scope": "enrollment", "requirement": "birth certificate", "dependent": "Mateo Ferreira",
+       "state": "received", "received_on": "2026-10-23", "channel": "employee portal upload", "verified_by": null, "verified_on": null}
+    ],
+    "E2012": [
+      {"id": "EV-E2012-01", "employee_id": "E2012", "scope": "enrollment", "requirement": "marriage certificate", "dependent": "Andrés Delgado",
+       "state": "verified", "received_on": "2026-10-01", "channel": "employee portal upload", "verified_by": "HR specialist (demo)", "verified_on": "2026-10-03"}
     ]
   },
   "policy_library": {

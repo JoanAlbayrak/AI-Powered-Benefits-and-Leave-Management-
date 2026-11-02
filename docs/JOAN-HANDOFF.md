@@ -72,6 +72,13 @@ Each task was committed separately on `claude/jolly-edison-vkgp9d`, started from
   - One `TimeBudget` per user action (`runner.py`), shared by the agent and any specialist it consults. Default 90 s (`ANTHROPIC_ACTION_BUDGET_SECONDS`, 10-110), under the page's 120 s action timeout. Each attempt is capped to its share of the remaining time so SDK retries cannot overrun it; a specialist is not started with under 5 s left. A timeout is reported as a clear, recoverable message and the checked results still show.
 - [x] **5. Complete-demo validation and documentation.** Browser rehearsal below; this handoff, the execution board and the demo script are updated.
 
+## Demo data and self-test additions (after the five tasks)
+
+- **More realistic synthetic data**, added alongside (not replacing) the original records: new hires E2007-E2012 and current employees E1006-E1009, with carrier confirmations and document records. The originals back the tests and the earlier rehearsals and are unchanged.
+- **Reset demo data**: `CaseStore.reset()` and `/api/demo/reset` forget every case, draft, edit and chat and re-read the data files, so editing the JSON and resetting takes effect without a restart. A button at the top of every page calls it. Demo only; the server listens on 127.0.0.1.
+- **`docs/FUNCTIONAL-TEST-GUIDE.md`**: a person-by-person table and 18 numbered tests. `tests/test_demo_scenarios.py` pins each person's behavior, and the guide was followed literally in a browser (56/56 checks, scripted model, not live).
+- Error messages no longer hardcode ID ranges.
+
 ## Behavior changed (summary for reviewers)
 
 - HR approval of an enrollment can now be refused as stale or incomplete based on live data, not the saved review.

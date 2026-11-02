@@ -112,6 +112,7 @@ Checked items are implemented and verified as stated in the [handoff](JOAN-HANDO
 - [x] **X3 Transitions:** HR verifies received proof; pending leave documents requested → received → verified/asked again/withdrawn; same-case correction after an information request. *(Backend rules and UI; browser rehearsal.)*
 - [x] **X4 Grounding and limits:** consider and intake agents read the approved policy; `DEMO-LEAVE-BALANCES@v1` replaces the invented balance rule; vesting from plan data with its policy ref; shared per-action time budget (default 90 s, under the 120 s page timeout).
 - [x] **X5 Validation and docs:** browser rehearsal 37/37 with a scripted model; handoff, board and script updated.
+- [x] **X5b Self-test kit:** realistic data (E2007-E2012, E1006-E1009), Reset demo data, and a functional test guide followed literally in a browser (56/56 checks, scripted model). See [the guide](FUNCTIONAL-TEST-GUIDE.md).
 - [ ] **X6 Live rehearsal of the new paths with a working key** (election consideration, free-text leave intake, new policy tools, budget under real latency). Not done.
 - [ ] **X7 Review and merge** of the feature PR by a human. Not merged.
 

@@ -60,9 +60,11 @@ Open `http://127.0.0.1:8001/legacy` for the original connected enrollment, leave
 
 The app runs only on your computer. Press **Ctrl + C** in Terminal to stop. See [Frontend scaffold](docs/FRONTEND-SCAFFOLD.md) for structure, boundaries, and next steps.
 
-**Demo people (all made up):**
-- New hires: E2001 Priya Nair (incomplete; marriage certificate *received*, not yet verified), E2002 Marcus Alvarez (complete), E2003 Sofia Lindqvist (part-time, needs an HR exception), E2004 Daniel Okafor (already sent to vendors; carrier says family, HR approved employee-only), E2005 Hana Petrov (child's birth certificate *not on record*), E2006 Omar Haddad (dependent proof *verified*; retirement choice missing).
-- Current employees: E1001 Elena Rossi, E1002 Liam Park, E1003 Nadia Castillo, E1004 Victor Dlamini, E1005 Freya Bergman — for leave requests (E1003 does not meet FMLA basics).
+**Demo people (all made up)** are in `data/benefits_demo.json` (new hires) and `data/fake_employees.json` (current employees):
+- New hires E2001–E2012 cover an incomplete enrollment, a complete one, part-time eligibility flags, a missed enrollment window, a family with mixed document states, a start-from-nothing hire, an already-sent case with a carrier mismatch (C1), and carriers that disagree or stay silent.
+- Current employees E1001–E1009 cover leave that meets, narrowly misses, or clearly misses the FMLA basics, real-zero balances, and unknown or bad data ("cannot determine").
+
+**Test it yourself:** follow the [functional test guide](docs/FUNCTIONAL-TEST-GUIDE.md): a table of every person and 18 step-by-step tests with expected results. Press **Reset demo data** (top of every page) to start clean. You can edit the two data files and press Reset to see changes without restarting.
 
 ## Public demo website
 

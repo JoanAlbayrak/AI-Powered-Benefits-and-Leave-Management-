@@ -327,3 +327,15 @@ test('a conflict response is marked stale so the page reloads the case; a plain 
   globalThis.fetch = async () => ({ ok: true, json: async () => ({ error: 'A reason is required for this decision' }) });
   await assert.rejects(api.decide('C2', 'deny', '', 1), error => error.stale === false);
 });
+
+test('resetting the demo is an explicit mutation to the reset route and carries no identity', async t => {
+  const original = globalThis.fetch;
+  t.after(() => { globalThis.fetch = original; });
+  const calls = [];
+  globalThis.fetch = async (path, options) => {
+    calls.push([path, JSON.parse(options.body)]);
+    return { ok: true, json: async () => ({ reset: { cases: 1 } }) };
+  };
+  await api.resetDemo();
+  assert.deepEqual(calls, [['/api/demo/reset', {}]]);
+});

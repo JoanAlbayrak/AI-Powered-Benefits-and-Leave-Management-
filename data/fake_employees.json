@@ -10,6 +10,14 @@
       "leave_balances": {"pto": 24, "sick": 16, "personal": 8}},
     "E1004": {"name": "Victor Dlamini", "hours_worked_12mo": 1600, "months_of_service": 24,
       "leave_balances": {"pto": 96, "sick": "forty", "personal": 16}},
-    "E1005": {"name": "Freya Bergman", "hours_worked_12mo": 1700, "months_of_service": 30}
+    "E1005": {"name": "Freya Bergman", "hours_worked_12mo": 1700, "months_of_service": 30},
+    "E1006": {"name": "Hannah Okoye", "hours_worked_12mo": 2010, "months_of_service": 62,
+      "leave_balances": {"pto": 120, "sick": 56, "personal": 24}},
+    "E1007": {"name": "Mateo Silva", "hours_worked_12mo": 1180, "months_of_service": 11,
+      "leave_balances": {"pto": 40, "sick": 24, "personal": 8}},
+    "E1008": {"name": "Grace Nakamura", "hours_worked_12mo": 1240, "months_of_service": 30,
+      "leave_balances": {"pto": 72, "sick": 32, "personal": 16}},
+    "E1009": {"name": "Ibrahim Yusuf", "hours_worked_12mo": 1700, "months_of_service": 45,
+      "leave_balances": {"pto": 0, "sick": 80, "personal": 12}}
   }
 }

@@ -186,6 +186,8 @@ def handle(store, path, body):
     eid = body.get("employee_id", "")
     if path == "/api/people":
         return {"people": people(store)}
+    if path == "/api/demo/reset":
+        return {"reset": store.reset()}
     if path == "/api/ai/status":
         return runner.readiness()     # local configuration only: no model call, never the key
     if path == "/api/employee/overview":
