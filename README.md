@@ -1,5 +1,7 @@
 # AI-Powered Benefits and Leave Management
 
+**Latest work-in-progress handoff:** [Joan: start here](docs/JOAN-HANDOFF.md). This interactive-enrollment branch has known approval and projection blockers; review the remaining-task checklist before merging.
+
 **Team handoff:** start with [Team start here](docs/TEAM-START-HERE.md) for implementation boundaries and local setup. The [execution board](docs/EXECUTION-BOARD.md) and [workflow contracts](docs/WORKFLOW-CONTRACTS.md) distinguish connected benefits actions from remaining proposals. See the [benefits integration checkpoint](docs/BENEFITS-WORKFLOW.md) for what to try now, or the [project proposal](docs/BENEFITS-LEAVE-PROPOSAL.md) and [visual PDF](docs/reports/Benefits-and-Leave-Case-Team-Report.pdf) for the domain and agent design.
 
 An AI-powered Benefits and Leave Management system with three agents. Employees log in to do their own benefits enrollment and leave requests, instead of sending paper or emailed forms. The agents check what's missing and explain it. **HR reviews every case and makes every decision.**
@@ -59,8 +61,8 @@ Open `http://127.0.0.1:8001/legacy` for the original connected enrollment, leave
 The app runs only on your computer. Press **Ctrl + C** in Terminal to stop. See [Frontend scaffold](docs/FRONTEND-SCAFFOLD.md) for structure, boundaries, and next steps.
 
 **Demo people (all made up):**
-- New hires: E2001 (incomplete; marriage certificate *received*, not yet verified), E2002 (complete), E2003 (part-time, needs an HR exception), E2004 (already sent to vendors; carrier says family, HR approved employee-only), E2005 (child's birth certificate *not on record*), E2006 (dependent proof *verified*; retirement choice missing).
-- Current employees: E1001–E1005, for leave requests (E1003 does not meet FMLA basics).
+- New hires: E2001 Priya Nair (incomplete; marriage certificate *received*, not yet verified), E2002 Marcus Alvarez (complete), E2003 Sofia Lindqvist (part-time, needs an HR exception), E2004 Daniel Okafor (already sent to vendors; carrier says family, HR approved employee-only), E2005 Hana Petrov (child's birth certificate *not on record*), E2006 Omar Haddad (dependent proof *verified*; retirement choice missing).
+- Current employees: E1001 Elena Rossi, E1002 Liam Park, E1003 Nadia Castillo, E1004 Victor Dlamini, E1005 Freya Bergman — for leave requests (E1003 does not meet FMLA basics).
 
 ## Public demo website
 

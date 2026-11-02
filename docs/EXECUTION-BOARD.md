@@ -1,6 +1,8 @@
 # Execution board
 
-**Status (1 November 2026): P1/P2 on `feat/connect-benefits-workflow`; P0 setup, P3–P6 and the P7 automated checks implemented on the T02–T08 task branches (see [implementation record](T02-T08-IMPLEMENTATION.md)).** Live rehearsal with the real key (P7/T09) and human review/merge remain open. Checked items describe implementation branches, not merges.
+**2 November update:** the original task stack is merged through PR #13 (and benefits integration through PR #4). The latest interactive extension is a separate work-in-progress branch. See [Joan handoff](JOAN-HANDOFF.md) for completed additions, reproduced blockers and remaining tasks. Historical status below describes the earlier checkpoint.
+
+**Status (1 November 2026): P1/P2 on `feat/connect-benefits-workflow`; P0 setup, P3–P6 and the P7 automated checks implemented on the T02–T08 task branches (see [implementation record](T02-T08-IMPLEMENTATION.md)).** Live rehearsal with the real key (P7/T09) passed on 2026-11-01. Feature PRs for T02–T08 and human review/merge remain open. Checked items describe implementation branches, not merges.
 
 Target: a presentable local live demo by Sunday evening, ready for Monday, 2 November 2026. Time boxes are estimates, not promises. If time becomes tight, complete and stabilize the first journey before expanding scope.
 
@@ -95,7 +97,7 @@ Checkpoint: one synthetic leave case goes from incomplete draft to HR review. A 
 - [x] Keyboard, narrow-screen, loading, error and empty states remain usable. *(Browser walkthrough: no console errors, no horizontal overflow at 390px.)*
 - [x] Tests cover missing data, approval guards, frozen handoffs, scope and consultation budgets.
 - [x] Runtime failure preserves deterministic results and clearly labels unavailable AI.
-- [ ] Two clean-start rehearsals succeed using the actual key and chosen model.
+- [x] Two clean-start rehearsals succeed using the actual key and chosen model. *(2026-11-01: readiness `--live` passed on claude-opus-5-5; two independent clean-start server instances both completed the enrollment check, Q&A, vendor mismatch + Vendor→Enrollment consultation, and leave draft→clarify→confirm→HR-approve journeys live with no errors.)*
 - [x] README and demo instructions reflect actual implemented behavior.
 - [ ] Feature PRs describe what changed, how it was checked and what remains limited.
 

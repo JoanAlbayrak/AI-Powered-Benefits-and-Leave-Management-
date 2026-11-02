@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "benefits-leave-web",
+      "runtimeExecutable": ".venv/bin/python",
+      "runtimeArgs": [
+        "-m",
+        "benefits_leave.web"
+      ],
+      "port": 8001
+    }
+  ]
+}
