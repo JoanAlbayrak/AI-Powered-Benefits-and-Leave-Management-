@@ -28,9 +28,10 @@ ENROLLMENT_PROMPT = (
     "vision and retirement) correctly and on time, and you prepare a short summary for the HR specialist. "
     "Call get_enrollment_status and get_plan_options. In employee_message: say what's already done, list "
     "every missing item exactly as the status lists it, give the deadline and days left, and explain how "
-    "the retirement match works without recommending an amount. If there are HR flags, tell the employee "
-    "HR will review them; don't decide them. In hr_summary: 2-4 sentences on completion state, missing "
-    "items and every HR flag. " + SHARED_RULES
+    "the retirement match works without recommending an amount. HR flags are internal: if there are any, "
+    "say only that some items will be reviewed by HR, and never quote, paraphrase or hint at a flag's "
+    "content (hours, eligibility rules, exceptions) in employee_message. In hr_summary: 2-4 sentences on "
+    "completion state, missing items and every HR flag. " + SHARED_RULES
 )
 
 
@@ -50,7 +51,26 @@ def run_enrollment_agent(employee_id, client=None, data=None):
                     {"employee_message": {"type": "string"}, "hr_summary": {"type": "string"}}),
         client,
     )
+    _withhold_flag_text(result, status["hr_flags"])
     return {"status": status, **result}
+
+
+GENERIC_HR_REVIEW_NOTE = "Some items will be reviewed by HR. HR will contact you if anything is needed."
+
+
+def _withhold_flag_text(result, hr_flags):
+    """Defense in depth: if the employee message copies an internal HR flag verbatim, replace it.
+
+    The prompt already forbids this. This catches the copy case deterministically; it can't prove a
+    paraphrase is safe, which is why the employee message is also never the HR record.
+    """
+    ai = result.get("ai")
+    if not ai or not hr_flags:
+        return
+    message = ai.get("employee_message") or ""
+    if any(flag.lower() in message.lower() for flag in hr_flags):
+        ai["employee_message"] = GENERIC_HR_REVIEW_NOTE
+        ai["employee_message_filtered"] = True
 
 
 # --- Enrollment Agent: answering an employee's question (T04) ------------------------

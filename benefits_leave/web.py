@@ -16,6 +16,7 @@ from urllib.parse import unquote, urlsplit
 
 from benefits_leave.workflow import LEAVE_SCHEDULES, CaseStore, WorkflowError
 from benefits_leave import checks, runner
+from benefits_leave.agents import employee_safe_status
 from benefits_leave.hr_lookup import load_fake_hr_data, lookup_employee_leave_balance
 
 PAGE = (Path(__file__).resolve().parent / "web_page.html").read_bytes()
@@ -48,6 +49,14 @@ def people(store):
     current = [{"id": eid, "name": e["name"], "kind": "current employee"}
                for eid, e in load_fake_hr_data()["employees"].items()]
     return new_hires + current
+
+
+def employee_enrollment_view(status):
+    """Progress and next steps only. HR flags and internal completion classes never leave the HR side.
+
+    One projection for every employee-facing enrollment response, so a new endpoint can't forget it.
+    """
+    return employee_safe_status(status)
 
 
 def employee_view(case):
@@ -147,7 +156,7 @@ def employee_overview(store, employee_id):
     if is_new_hire:
         result = checks.enrollment_status(employee_id, store.data)
         # Keep eligibility flags and internal completion classifications HR-only.
-        enrollment = {k: result[k] for k in ("name", "deadline", "days_left", "done", "missing", "notes", "as_of")}
+        enrollment = employee_enrollment_view(result)
     hire = store.data["new_hires"].get(employee_id)
     return {"employee": person, "enrollment": enrollment,
             "selections": employee_selections(store, employee_id),
@@ -181,8 +190,7 @@ def handle(store, path, body):
         result, case = store.check_enrollment(eid)
         s = result["status"]
         return {"case": employee_view(case),
-                "enrollment": {k: s[k] for k in ("name", "deadline", "days_left", "enrollment_state",
-                                                 "done", "missing", "notes")},
+                "enrollment": employee_enrollment_view(s),
                 "message": (result["ai"] or {}).get("employee_message"), "ai_error": result["ai_error"]}
     if path == "/api/employee/enrollment/help":
         turn = store.enrollment_help(eid, body.get("question", ""))
@@ -191,7 +199,7 @@ def handle(store, path, body):
     if path == "/api/employee/enrollment/elect":
         election_fields = {k: body.get(k) for k in ("status", "plan", "tier", "percent")}
         status = store.set_election(eid, body.get("benefit", ""), election_fields)
-        return {"enrollment": {k: status[k] for k in ("done", "missing", "hr_flags", "notes")},
+        return {"enrollment": employee_enrollment_view(status),
                 "selections": employee_selections(store, eid), "cost_summary": store.enrollment_cost_summary(eid)}
     if path == "/api/employee/enrollment/consider":
         election_fields = {k: body.get(k) for k in ("status", "plan", "tier", "percent")}
