@@ -392,6 +392,36 @@ class InteractiveElections(unittest.TestCase):
         self.assertGreater(summary["employee_per_paycheck"], 0)
         self.assertGreater(summary["employer_per_paycheck"], summary["employee_per_paycheck"])
 
+    def test_editing_an_open_case_resyncs_its_completeness_not_just_the_live_check(self):
+        """Regression: HR's approval gate reads the case's own cached `enrollment`, not a fresh
+        check. Without resyncing on every election/dependent edit, HR could approve a case that
+        looked complete at check time but has since become incomplete."""
+        store = CaseStore(client=FakeClient())
+        _, case = store.check_enrollment("E2002")
+        self.assertEqual(case["status"], "ready_for_hr_review")
+        store.set_election("E2002", "medical", {"status": "elected", "plan": "Gold HMO", "tier": "family"})
+        self.assertEqual(case["status"], "incomplete")
+        self.assertTrue(case["enrollment"]["missing"])
+        with self.assertRaises(WorkflowError):
+            store.hr_decide(case["id"], "approve")
+
+    def test_adding_a_dependent_also_resyncs_the_open_case(self):
+        store = CaseStore(client=FakeClient())
+        store.set_election("E2002", "medical", {"status": "elected", "plan": "Gold HMO", "tier": "employee_spouse"})
+        _, case = store.check_enrollment("E2002")
+        self.assertEqual(case["status"], "incomplete")   # missing: add spouse as dependent
+        store.add_dependent("E2002", "spouse", "Jordan Alvarez")
+        # still incomplete (proof not uploaded/verified), but the case reflects the new dependent
+        self.assertIn("Jordan Alvarez", str(case["enrollment"]["missing"]))
+
+    def test_elect_endpoint_never_returns_hr_only_flags_to_the_employee(self):
+        """Regression: /elect used to leak hr_flags into the employee-facing response."""
+        store = CaseStore(client=FakeClient())
+        store.set_election("E2003", "medical", {"status": "elected", "plan": "Bronze HMO", "tier": "employee"})
+        out = handle(store, "/api/employee/enrollment/elect",
+                    {"employee_id": "E2003", "benefit": "dental", "status": "waived"})
+        self.assertNotIn("hr_flags", out["enrollment"])
+
 
 class WebHandle(unittest.TestCase):
     def test_employee_and_hr_endpoints(self):

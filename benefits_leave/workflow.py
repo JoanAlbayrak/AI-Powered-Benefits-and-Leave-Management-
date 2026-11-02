@@ -158,6 +158,28 @@ class CaseStore:
         """True once HR has decided this enrollment; elections can no longer be changed from here."""
         return self._decided_enrollment_case(employee_id) is not None
 
+    def _open_enrollment_case(self, employee_id):
+        """The employee's own enrollment case if HR hasn't decided it yet, else None."""
+        return next((c for c in self.cases.values() if c["kind"] == "enrollment"
+                    and c["employee_id"] == employee_id
+                    and c["status"] in ("incomplete", "ready_for_hr_review", "info_requested")), None)
+
+    def _resync_open_case(self, employee_id, status):
+        """Keep an already-created, not-yet-decided case's completeness in step with the current
+        elections/dependents. Without this, HR's approval gate could read a stale snapshot from
+        before a later edit -- e.g. approving a case that, after a subsequent election change,
+        actually has missing items again. Called after every election/dependent mutation.
+        """
+        case = self._open_enrollment_case(employee_id)
+        if case is None:
+            return
+        case["enrollment"] = status
+        case["status"] = "incomplete" if status["missing"] else "ready_for_hr_review"
+        self._activity(case, "code", "Elections changed; completeness re-checked",
+                       f"{len(status['missing'])} item(s) still missing" if status["missing"] else "Nothing missing",
+                       next_step="Employee completes the missing items" if status["missing"] else "HR reviews the case",
+                       visibility="employee")
+
     def set_election(self, employee_id, benefit, fields):
         """The employee elects, waives, or resets one benefit. Code validates it; nothing here chooses for them."""
         hire = self.data["new_hires"].get(employee_id)
@@ -168,7 +190,9 @@ class CaseStore:
             raise WorkflowError(f"Your enrollment was already decided (case {locked['id']}); "
                                 f"contact HR to request a change")
         hire["elections"][benefit] = self._validate_election_fields(benefit, fields)
-        return checks.enrollment_status(employee_id, self.data)
+        status = checks.enrollment_status(employee_id, self.data)
+        self._resync_open_case(employee_id, status)
+        return status
 
     def consider_election(self, employee_id, benefit, fields):
         """The employee is weighing a change but hasn't saved it. The agent only explains the choice.
@@ -213,6 +237,7 @@ class CaseStore:
         if len(name) > MAX_NAME_CHARS:
             raise WorkflowError(f"Keep the name under {MAX_NAME_CHARS} characters")
         hire["dependents"].append({"name": name, "relationship": relationship, "proof_received": False})
+        self._resync_open_case(employee_id, checks.enrollment_status(employee_id, self.data))
         return checks.evidence_status(employee_id, self.data)
 
     def mark_document_uploaded(self, employee_id, relationship, name):
@@ -241,6 +266,7 @@ class CaseStore:
             "id": entry_id, "employee_id": employee_id, "scope": "enrollment", "requirement": requirement,
             "dependent": name, "state": "received", "received_on": self.data["as_of"],
             "channel": "employee portal upload", "verified_by": None, "verified_on": None})
+        self._resync_open_case(employee_id, checks.enrollment_status(employee_id, self.data))
         return checks.evidence_status(employee_id, self.data)
 
     def enrollment_cost_summary(self, employee_id):

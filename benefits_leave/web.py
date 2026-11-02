@@ -191,7 +191,7 @@ def handle(store, path, body):
     if path == "/api/employee/enrollment/elect":
         election_fields = {k: body.get(k) for k in ("status", "plan", "tier", "percent")}
         status = store.set_election(eid, body.get("benefit", ""), election_fields)
-        return {"enrollment": {k: status[k] for k in ("done", "missing", "hr_flags", "notes")},
+        return {"enrollment": {k: status[k] for k in ("done", "missing", "notes")},  # hr_flags stays HR-only
                 "selections": employee_selections(store, eid), "cost_summary": store.enrollment_cost_summary(eid)}
     if path == "/api/employee/enrollment/consider":
         election_fields = {k: body.get(k) for k in ("status", "plan", "tier", "percent")}
