@@ -1,4 +1,4 @@
-import { escape, icon, notice, panel, buttonLink, statusBadge } from './components.js';
+import { escape, icon, notice, panel, buttonLink, statusBadge, badge, label, formatDate } from './components.js';
 
 export function enrollmentActions(data) {
   const item = data.cases.find(value => value.kind === 'enrollment');
@@ -35,4 +35,24 @@ export function vendorDrafts(item) {
   const result = item.vendor;
   if (!result?.reconciliation) return '';
   return `<div class="spaced">${panel('Follow-up drafts for HR', `<div class="panel-body">${result.ai_error ? notice(`AI explanation unavailable: ${result.ai_error} The comparison and rule-based draft templates are still available.`, 'warning') : ''}${result.follow_ups?.length ? result.follow_ups.map(draft => `<article class="draft spaced"><h3>${escape(draft.vendor)}</h3><p class="inline-note">${escape(draft.issue)}</p><p class="generated-text spaced">${escape(draft.draft_message)}</p><p class="inline-note spaced">Draft only · HR reviews and sends through its own channel.</p></article>`).join('') : '<p>No follow-up drafts are needed for these results.</p>'}</div>`)}</div>`;
+}
+
+const evidenceBadge = state => badge({ absent: 'Not on record', received: 'Received · awaiting HR check', verified: 'Verified by HR' }[state] || label(state), { absent: 'warning', received: '', verified: 'success' }[state] || 'neutral', { absent: 'warning', received: 'clock', verified: 'check' }[state]);
+export const refChips = refs => (refs || []).length ? `<div class="ref-row">${refs.map(ref => `<span class="ref-chip">${escape(ref)}</span>`).join('')}</div>` : '';
+
+export function documentStatus(evidence) {
+  if (!evidence?.length) return '';
+  return panel('Your documents', evidence.map(item => `<div class="list-row"><div class="row-content">${icon('document')}<div><b>${escape(label(item.requirement))} · ${escape(item.dependent)}</b><p>${item.state === 'absent' ? 'No document is on record for this requirement.' : item.state === 'received' ? `Received ${formatDate(item.received_on)}. It stays on your checklist until HR verifies it.` : `Verified by HR ${formatDate(item.verified_on)}.`}${item.evidence_ref ? ` · ${escape(item.evidence_ref)}` : ''}</p></div></div>${evidenceBadge(item.state)}</div>`).join(''), 'Fictional document records. Received is not the same as verified.');
+}
+
+function helpTurn(turn) {
+  const answer = turn.answer ? `<p class="generated-text">${escape(turn.answer)}</p>` : notice(`AI answer unavailable: ${turn.ai_error || 'no answer'} The facts from your records are below.`, 'warning');
+  return `<article class="help-turn"><p class="help-question"><b>You asked</b> ${escape(turn.question)}</p><div class="help-answer"><small>${icon('bot')}Enrollment Agent</small>${answer}${turn.follow_up_question ? `<p class="help-follow-up"><b>Question for you:</b> ${escape(turn.follow_up_question)}</p>` : ''}${refChips([...(turn.evidence_refs || []), ...(turn.policy_refs || [])])}${turn.unresolved?.length ? `<p class="inline-note spaced">Could not establish: ${escape(turn.unresolved.join('; '))}</p>` : ''}<details class="spaced"><summary>From your records</summary>${(turn.facts || []).map(fact => `<p class="inline-note">${escape(fact)}</p>`).join('')}</details></div></article>`;
+}
+
+export const HELP_SUGGESTIONS = ['I already uploaded my document. Why is it still on my list?', 'What do I still need to do before my deadline?', 'How does the 401(k) match work?'];
+
+export function enrollmentHelp(data) {
+  const thread = data.help_thread || [];
+  return panel('Ask the Enrollment Agent', `<div class="panel-body"><p>Ask about your own enrollment. The agent looks up your document records and the approved demo policy before answering. Asking does not change your case, notify HR or approve anything.</p>${thread.length ? `<div class="help-thread spaced">${thread.map(helpTurn).join('')}</div>` : ''}<form id="enrollment-help-form" class="spaced"><div class="form-field"><label for="help-question">Your question</label><textarea id="help-question" maxlength="600" required placeholder="For example: I already uploaded my marriage certificate."></textarea></div><div class="chip-row" aria-label="Example questions">${HELP_SUGGESTIONS.map(text => `<button type="button" class="chip" data-help-suggestion="${escape(text)}">${escape(text)}</button>`).join('')}</div><div class="actions spaced"><button class="btn primary" type="submit" data-workflow-action="help">${icon('bot')}Ask the Enrollment Agent</button></div></form></div>`, 'Answers cite the records they used.');
 }
